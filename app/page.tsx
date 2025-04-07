@@ -20,6 +20,7 @@ import { AIAssistantView } from "@/components/ai-assistant-view"
 import { CustomerView } from "@/components/customer-view"
 import { MainHeader } from "@/components/main-header"
 import { AIFloatingButton } from "@/components/ai-floating-button"
+import { useRouter } from 'next/navigation'
 
 // Benzersiz ID üretmek için fonksiyon
 function generateUUID() {
@@ -57,10 +58,24 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isAIOpen, setIsAIOpen] = useState<boolean>(false)
   const { toast } = useToast()
+  const router = useRouter()
 
   // Add state to store temporary form data
   const [tempTourFormData, setTempTourFormData] = useState<any>(null)
   const [previousView, setPreviousView] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      // Sadece giriş yapılmamışsa admin login'e yönlendir
+      const isLoggedIn = localStorage.getItem('adminLoggedIn');
+      if (!isLoggedIn) {
+        window.location.href = '/admin/login';
+      }
+      // Eğer giriş yapılmışsa ana sayfada kal
+    } catch (err) {
+      console.error('Home redirect error:', err);
+    }
+  }, [router]);
 
   useEffect(() => {
     // Veritabanını başlat
