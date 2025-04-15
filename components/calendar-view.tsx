@@ -4,7 +4,31 @@ import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ChevronLeft, ChevronRight, CalendarIcon, Clock, Users, MapPin } from "lucide-react"
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  CalendarIcon, 
+  Clock, 
+  Users, 
+  MapPin, 
+  ExternalLink 
+} from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+
+// Para formatı yardımcı fonksiyonu
+const formatCurrency = (amount: number, currency: string) => {
+  return new Intl.NumberFormat('tr-TR', { 
+    style: 'currency', 
+    currency: currency || 'TRY' 
+  }).format(amount);
+}
 
 // Event (Tour) tipini tanımla (daha spesifik)
 interface CalendarEvent {
@@ -456,4 +480,3 @@ export function CalendarView({ onNavigate, toursData = [] }: CalendarViewProps) 
     </div>
   )
 }
-

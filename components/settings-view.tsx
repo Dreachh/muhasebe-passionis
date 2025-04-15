@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/components/ui/use-toast"
+import { loadSampleData } from "@/lib/load-sample-data"
 import { Building, Plus, Trash2, Edit, Users, Save, MapPin, Activity, CircleSlash } from "lucide-react"
 import {
   getSettings,
@@ -962,6 +963,7 @@ export function SettingsView({ onClose }) {
                 <Save className="h-4 w-4 mr-2" />
                 Şirket Bilgilerini Kaydet
               </Button>
+
             </div>
           </TabsContent>
 

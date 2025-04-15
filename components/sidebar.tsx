@@ -43,11 +43,9 @@ export function Sidebar({ currentView, onNavigate }) {
           <img
             src="/logo.svg"
             alt="PassionisTravel Logo"
-            className={collapsed ? "h-12" : "h-16"}
+            className="h-8 w-auto"
             onClick={() => onNavigate("dashboard")}
             style={{ cursor: "pointer" }}
-            width="200"
-            height="60"
           />
         </div>
         <Button
@@ -85,4 +83,3 @@ export function Sidebar({ currentView, onNavigate }) {
     </div>
   )
 }
-

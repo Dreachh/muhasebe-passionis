@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { DollarSign, Users, Calendar, Globe, FileText, BarChart2, Settings, Brain } from "lucide-react"
+import { DollarSign, Users, Calendar, Globe, FileText, BarChart2, Settings, Save } from "lucide-react"
 import { formatCurrency } from "@/lib/data-utils"
 import { Button } from "@/components/ui/button"
 
@@ -16,12 +16,41 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
   // Toplam gelir
   const totalIncome = recentFinancialData
     .filter((item) => item.type === "income")
-    .reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+    .reduce((sum, item) => sum + (Number.parseFloat(item.amount?.toString() || "0") || 0), 0)
+    
+  // Para birimlerine göre gelirler
+  const incomeByCurrency = recentFinancialData
+    .filter((item) => item.type === "income")
+    .reduce<Record<string, number>>((acc, item) => {
+      const currency = item.currency || "TRY";
+      const amount = Number.parseFloat(item.amount?.toString() || "0") || 0;
+      acc[currency] = (acc[currency] || 0) + amount;
+      return acc;
+    }, {});
 
   // Toplam gider
   const totalExpense = recentFinancialData
     .filter((item) => item.type === "expense")
-    .reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+    .reduce((sum, item) => sum + (Number.parseFloat((item as any).amount) || 0), 0)
+    
+  // Para birimlerine göre giderler
+  const expenseByCurrency = recentFinancialData
+    .filter((item) => item.type === "expense")
+    .reduce<Record<string, number>>((acc, item) => {
+      const currency = (item as any).currency || "TRY";
+      const amount = Number.parseFloat((item as any).amount) || 0;
+      acc[currency] = (acc[currency] || 0) + amount;
+      return acc;
+    }, {});
+    
+  // Eğer para birimi gösterimi boşsa, varsayılan olarak TRY ekle
+  if (Object.keys(incomeByCurrency).length === 0) {
+    incomeByCurrency["TRY"] = 0;
+  }
+  
+  if (Object.keys(expenseByCurrency).length === 0) {
+    expenseByCurrency["TRY"] = 0;
+  }
 
   // Toplam müşteri sayısı
   const totalCustomers = customersData.length
@@ -74,18 +103,18 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
       onClick: () => onNavigate("data-view"),
     },
     {
-      title: "Raporlar",
-      description: "Finansal raporlar ve analizler",
+      title: "Gelişmiş Analiz",
+      description: "Detaylı finansal ve tur analizleri, müşteri demografisi ve yazdırılabilir raporlar",
       icon: <BarChart2 className="h-8 w-8 text-red-500" />,
       color: "bg-red-50 hover:bg-red-100",
       onClick: () => onNavigate("analytics"),
     },
     {
-      title: "AI Asistan",
-      description: "Yapay zeka destekli asistan",
-      icon: <Brain className="h-8 w-8 text-teal-500" />,
+      title: "Yedekleme/Geri Yükleme",
+      description: "Verileri bilgisayarınıza kaydedin veya geri yükleyin",
+      icon: <Save className="h-8 w-8 text-teal-500" />,
       color: "bg-teal-50 hover:bg-teal-100",
-      onClick: () => onNavigate("ai-assistant"),
+      onClick: () => onNavigate("backup-restore"),
     },
     {
       title: "Ayarlar",
@@ -105,7 +134,14 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground">Gelir (Son 30 gün)</h3>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
+                <div>
+                  {/* Para birimlerine göre ayrı ayrı göster */}
+                  {Object.entries(incomeByCurrency).map(([currency, amount]) => (
+                    <p key={currency} className="text-xl font-bold text-green-600">
+                      {formatCurrency(amount, currency)}
+                    </p>
+                  ))}
+                </div>
               </div>
               <div className="bg-green-100 p-3 rounded-full">
                 <DollarSign className="h-6 w-6 text-green-500" />
@@ -119,7 +155,14 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground">Gider (Son 30 gün)</h3>
-                <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpense)}</p>
+                <div>
+                  {/* Para birimlerine göre ayrı ayrı göster */}
+                  {Object.entries(expenseByCurrency).map(([currency, amount]) => (
+                    <p key={currency} className="text-xl font-bold text-red-600">
+                      {formatCurrency(amount, currency)}
+                    </p>
+                  ))}
+                </div>
               </div>
               <div className="bg-red-100 p-3 rounded-full">
                 <DollarSign className="h-6 w-6 text-red-500" />

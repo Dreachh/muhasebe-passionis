@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Home, Brain, Menu } from "lucide-react"
+import { Home, Menu } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 interface MainHeaderProps {
@@ -28,7 +28,6 @@ export function MainHeader({ currentView, onNavigate }: MainHeaderProps) {
     { id: "data-view", label: "Kayıtlar", icon: null },
     { id: "analytics", label: "Raporlar", icon: null },
     { id: "currency", label: "Döviz Kurları", icon: null },
-    { id: "ai-assistant", label: "AI Asistan", icon: <Brain className="h-5 w-5" /> },
     { id: "settings", label: "Ayarlar", icon: null },
   ];
 
@@ -48,7 +47,7 @@ export function MainHeader({ currentView, onNavigate }: MainHeaderProps) {
                 <div className="flex flex-col h-full">
                   <div className="p-4 border-b">
                     <div className="flex items-center justify-center">
-                      <img src="/logo.svg" alt="PassionisTravel Logo" className="h-16" />
+                      <img src="/logo.svg" alt="PassionisTravel Logo" className="h-12" />
                     </div>
                   </div>
                   <nav className="flex-1 overflow-auto p-2">
@@ -78,7 +77,7 @@ export function MainHeader({ currentView, onNavigate }: MainHeaderProps) {
             </Sheet>
 
             <div className="flex items-center cursor-pointer" onClick={() => onNavigate("main-dashboard")}>
-              <img src="/logo.svg" alt="PassionisTravel Logo" className="h-20" />
+              <img src="/logo.svg" alt="PassionisTravel Logo" className="h-14" />
             </div>
           </div>
 
@@ -94,21 +93,9 @@ export function MainHeader({ currentView, onNavigate }: MainHeaderProps) {
               <Home className="h-5 w-5 mr-1" />
               Ana Sayfa
             </Button>
-            <Button
-              variant={currentView === "ai-assistant" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => onNavigate("ai-assistant")}
-              className={`flex items-center ${
-                currentView === "ai-assistant" ? "bg-teal-50 text-teal-600" : "text-teal-600 hover:bg-teal-50"
-              }`}
-            >
-              <Brain className="h-5 w-5 mr-1" />
-              AI Asistan
-            </Button>
           </nav>
         </div>
       </div>
     </header>
   )
 }
-

@@ -2,8 +2,19 @@
 const DB_NAME = "passionistravelDB"
 const DB_VERSION = 1
 
+// Store konfigürasyonu için arayüz tanımlaması
+interface StoreConfig {
+  keyPath: string;
+  indexes?: string[];
+}
+
+// Store'ların koleksiyonu için arayüz tanımlaması
+interface StoreCollection {
+  [key: string]: StoreConfig;
+}
+
 // Veritabanı şeması
-const STORES = {
+const STORES: StoreCollection = {
   tours: { keyPath: "id", indexes: ["customerName", "tourDate"] },
   financials: { keyPath: "id", indexes: ["date", "type"] },
   customers: { keyPath: "id", indexes: ["name", "phone"] },
@@ -14,6 +25,7 @@ const STORES = {
   destinations: { keyPath: "id", indexes: ["name", "country"] },
   ai_conversations: { keyPath: "id", indexes: ["timestamp"] },
   customer_notes: { keyPath: "id", indexes: ["customerId", "timestamp"] },
+  referral_sources: { keyPath: "id", indexes: ["name", "type"] },
 }
 
 // Veritabanını başlat
@@ -111,17 +123,22 @@ export const deleteData = async (storeName: string, id: string): Promise<void> =
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, "readwrite")
     const store = transaction.objectStore(storeName)
+    
+    console.log(`Silme işlemi başlıyor: Store=${storeName}, ID=${id}`);
     const request = store.delete(id)
 
     request.onsuccess = () => {
+      console.log(`Veri başarıyla silindi: Store=${storeName}, ID=${id}`);
       resolve()
     }
 
     request.onerror = () => {
+      console.error(`Veri silinirken hata oluştu: Store=${storeName}, ID=${id}, Hata:`, request.error);
       reject("Veri silinirken hata oluştu: " + request.error)
     }
 
     transaction.oncomplete = () => {
+      console.log(`Silme işlemi tamamlandı: Store=${storeName}, ID=${id}`);
       db.close()
     }
   })
@@ -228,17 +245,75 @@ export const saveExpenseTypes = async (expenseTypes: any[]): Promise<void> => {
 
 // Gider türlerini getir
 export const getExpenseTypes = async (type?: string): Promise<any[]> => {
+  // Varsayılan gider türleri
+  const defaultExpenseTypes = [
+    { id: "default-expense-1", type: "accommodation", name: "Konaklama", category: "Tur Giderleri" },
+    { id: "default-expense-2", type: "transportation", name: "Ulaşım", category: "Tur Giderleri" },
+    { id: "default-expense-3", type: "meal", name: "Yemek", category: "Tur Giderleri" },
+    { id: "default-expense-4", type: "guide", name: "Rehber Ücreti", category: "Personel" },
+    { id: "default-expense-5", type: "entry", name: "Giriş Ücreti", category: "Tur Giderleri" }
+  ];
+
   try {
-    const allExpenses = await getAllData("expenses")
-
-    if (type) {
-      return allExpenses.filter((expense) => expense.type === type)
+    // Önce localStorage'dan kontrol et
+    try {
+      const cachedData = localStorage.getItem('expenseTypes');
+      if (cachedData) {
+        try {
+          const parsedData = JSON.parse(cachedData);
+          if (parsedData && Array.isArray(parsedData) && parsedData.length > 0) {
+            console.log("Gider türleri önbellekten yüklendi:", parsedData.length);
+            // Veri filtreleme
+            if (type) {
+              return parsedData.filter((expense) => expense.type === type);
+            }
+            return parsedData;
+          }
+        } catch (parseError) {
+          console.error("JSON ayrıştırma hatası:", parseError);
+        }
+      }
+    } catch (storageError) {
+      console.warn("LocalStorage erişim hatası:", storageError);
     }
+    
+    // Veri tabanından yüklemeyi dene
+    const allExpenses = await getAllData("expenses");
 
-    return allExpenses
+    if (allExpenses && Array.isArray(allExpenses) && allExpenses.length > 0) {
+      // Önbelleğe kaydet
+      try {
+        localStorage.setItem('expenseTypes', JSON.stringify(allExpenses));
+      } catch (e) {}
+      
+      // Veri filtreleme
+      if (type) {
+        return allExpenses.filter((expense) => expense.type === type);
+      }
+      return allExpenses;
+    }
+    
+    // Veri bulunamadıysa varsayılan verileri kullan
+    console.info("Veri tabanında gider türleri bulunamadı, varsayılan veriler kullanılıyor");
+    
+    // Varsayılan verileri önbelleğe kaydet
+    try {
+      localStorage.setItem('expenseTypes', JSON.stringify(defaultExpenseTypes));
+    } catch (e) {}
+    
+    // Veri filtreleme
+    if (type) {
+      return defaultExpenseTypes.filter((expense) => expense.type === type);
+    }
+    return defaultExpenseTypes;
   } catch (error) {
-    console.error("Gider türleri alınırken hata:", error)
-    return []
+    console.error("Gider türleri alınırken hata:", error);
+    
+    // Hata durumunda varsayılan verileri döndür
+    if (type) {
+      return defaultExpenseTypes.filter((expense) => expense.type === type);
+    }
+    return defaultExpenseTypes;
   }
 }
 
@@ -260,14 +335,116 @@ export const saveProviders = async (providers: any[]): Promise<void> => {
 
 // Sağlayıcıları getir
 export const getProviders = async (): Promise<any[]> => {
+  // Varsayılan sağlayıcılar
+  const defaultProviders = [
+    { id: "default-provider-1", name: "ABC Tur", type: "tour_operator", contact: "0212 123 4567", address: "İstanbul" },
+    { id: "default-provider-2", name: "XYZ Hotel", type: "accommodation", contact: "0216 765 4321", address: "Antalya" },
+    { id: "default-provider-3", name: "Güven Transfer", type: "transportation", contact: "0532 987 6543", address: "İzmir" }
+  ];
+
   try {
-    const allProviders = await getAllData("providers")
-    return allProviders
+    // Önce localStorage'dan kontrol et
+    try {
+      const cachedData = localStorage.getItem('providers');
+      if (cachedData) {
+        try {
+          const parsedData = JSON.parse(cachedData);
+          if (parsedData && Array.isArray(parsedData) && parsedData.length > 0) {
+            console.log("Sağlayıcılar önbellekten yüklendi:", parsedData.length);
+            return parsedData;
+          }
+        } catch (parseError) {
+          console.error("JSON ayrıştırma hatası:", parseError);
+        }
+      }
+    } catch (storageError) {
+      console.warn("LocalStorage erişim hatası:", storageError);
+    }
+
+    // Veri tabanından yüklemeyi dene
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      try {
+        if (!db.objectStoreNames.contains("providers")) {
+          console.log("'providers' deposu bulunamadı, varsayılan veriler kullanılıyor");
+          db.close();
+          
+          // Önbelleğe kaydet
+          try {
+            localStorage.setItem('providers', JSON.stringify(defaultProviders));
+          } catch (e) {}
+          
+          resolve(defaultProviders);
+          return;
+        }
+
+        const transaction = db.transaction("providers", "readonly");
+        const store = transaction.objectStore("providers");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const results = request.result || [];
+          console.log("Yüklenen sağlayıcılar:", results.length, "adet");
+          
+          if (results.length > 0) {
+            // Önbelleğe kaydet
+            try {
+              localStorage.setItem('providers', JSON.stringify(results));
+            } catch (cacheError) {
+              console.warn("Sağlayıcılar önbelleğe kaydedilemedi:", cacheError);
+            }
+            
+            resolve(results);
+          } else {
+            console.log("Veri tabanında sağlayıcı bulunamadı, varsayılan veriler kullanılıyor");
+            
+            // Önbelleğe kaydet
+            try {
+              localStorage.setItem('providers', JSON.stringify(defaultProviders));
+            } catch (e) {}
+            
+            resolve(defaultProviders);
+          }
+        };
+
+        request.onerror = () => {
+          console.error("Sağlayıcılar alınırken hata:", request.error);
+          db.close();
+          
+          // Önbelleğe kaydet
+          try {
+            localStorage.setItem('providers', JSON.stringify(defaultProviders));
+          } catch (e) {}
+          
+          resolve(defaultProviders);
+        };
+
+        transaction.oncomplete = () => {
+          db.close();
+        };
+      } catch (txError) {
+        console.error("Sağlayıcı transaction hatası:", txError);
+        try { db.close(); } catch (e) {}
+        
+        // Önbelleğe kaydet
+        try {
+          localStorage.setItem('providers', JSON.stringify(defaultProviders));
+        } catch (e) {}
+        
+        resolve(defaultProviders);
+      }
+    });
   } catch (error) {
-    console.error("Sağlayıcılar alınırken hata:", error)
-    return []
+    console.error("Sağlayıcı yükleme hatası:", error);
+    
+    // Önbelleğe kaydet
+    try {
+      localStorage.setItem('providers', JSON.stringify(defaultProviders));
+    } catch (e) {}
+    
+    return defaultProviders;
   }
-}
+};
 
 // Aktiviteleri kaydet
 export const saveActivities = async (activities: any[]): Promise<void> => {
@@ -283,45 +460,237 @@ export const saveActivities = async (activities: any[]): Promise<void> => {
     console.error("Aktiviteler kaydedilirken hata:", error)
     throw error
   }
-}
+};
 
 // Aktiviteleri getir
 export const getActivities = async (): Promise<any[]> => {
+  // Varsayılan aktiviteler - her durumda kullanılabilir
+  const defaultActivities = [
+    { id: "default-act-1", name: "Tekne Turu", destinationId: "default-dest-1", price: "300", currency: "TRY", description: "Güzel bir tekne turu" },
+    { id: "default-act-2", name: "Müze Gezisi", destinationId: "default-dest-2", price: "150", currency: "TRY", description: "Tarihi müze gezisi" },
+    { id: "default-act-3", name: "Balon Turu", destinationId: "default-dest-3", price: "2000", currency: "TRY", description: "Kapadokya'da balon turu" }
+  ];
+  
   try {
-    const allActivities = await getAllData("activities")
-    return allActivities
-  } catch (error) {
-    console.error("Aktiviteler alınırken hata:", error)
-    return []
-  }
-}
-
-// Destinasyonları kaydet
-export const saveDestinations = async (destinations: any[]): Promise<void> => {
-  try {
-    // Önce mevcut destinasyonları temizle
-    await clearStore("destinations")
-
-    // Sonra yeni destinasyonları ekle
-    for (const destination of destinations) {
-      await addData("destinations", destination)
+    // Önce localStorage'dan yüklemeyi dene
+    try {
+      const cachedActivities = localStorage.getItem('activities');
+      if (cachedActivities) {
+        try {
+          const parsedActivities = JSON.parse(cachedActivities);
+          if (parsedActivities && Array.isArray(parsedActivities) && parsedActivities.length > 0) {
+            console.log("Aktiviteler önbellekten yüklendi:", parsedActivities.length, "adet");
+            return parsedActivities;
+          }
+        } catch (parseError) {
+          console.error("Aktivite JSON ayrıştırma hatası:", parseError);
+        }
+      }
+    } catch (cacheError) {
+      console.warn("Aktiviteler önbellekten yüklenemedi:", cacheError);
     }
+    
+    // IndexedDB'den yüklemeye çalış
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      try {
+        if (!db.objectStoreNames.contains("activities")) {
+          console.log("'activities' deposu bulunamadı, varsayılan veriler kullanılıyor");
+          db.close();
+          
+          // Önbelleğe kaydet
+          try {
+            localStorage.setItem('activities', JSON.stringify(defaultActivities));
+          } catch (e) {}
+          
+          resolve(defaultActivities);
+          return;
+        }
+
+        const transaction = db.transaction("activities", "readonly");
+        const store = transaction.objectStore("activities");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const activities = request.result || [];
+          console.log("Yüklenen aktiviteler:", activities.length, "adet");
+          
+          if (activities.length > 0) {
+            // Önbelleğe kaydet
+            try {
+              localStorage.setItem('activities', JSON.stringify(activities));
+            } catch (cacheError) {
+              console.warn("Aktiviteler önbelleğe kaydedilemedi:", cacheError);
+            }
+            
+            resolve(activities);
+          } else {
+            console.log("Veri tabanında aktivite bulunamadı, varsayılan veriler kullanılıyor");
+            
+            // Önbelleğe kaydet
+            try {
+              localStorage.setItem('activities', JSON.stringify(defaultActivities));
+            } catch (e) {}
+            
+            resolve(defaultActivities);
+          }
+        };
+
+        request.onerror = () => {
+          console.error("Aktiviteler alınırken hata:", request.error);
+          
+          try { db.close(); } catch (e) {}
+          
+          // Hata durumunda varsayılan verileri döndür
+          try {
+            localStorage.setItem('activities', JSON.stringify(defaultActivities));
+          } catch (e) {}
+          
+          resolve(defaultActivities);
+        };
+
+        transaction.oncomplete = () => {
+          db.close();
+        };
+      } catch (txError) {
+        console.error("Aktivite transaction hatası:", txError);
+        try { db.close(); } catch (e) {}
+        
+        // Hata durumunda varsayılan verileri döndür
+        try {
+          localStorage.setItem('activities', JSON.stringify(defaultActivities));
+        } catch (e) {}
+        
+        resolve(defaultActivities);
+      }
+    });
   } catch (error) {
-    console.error("Destinasyonlar kaydedilirken hata:", error)
-    throw error
+    console.error("Aktivite yükleme hatası:", error);
+    
+    // Hata durumunda varsayılan verileri döndür
+    try {
+      localStorage.setItem('activities', JSON.stringify(defaultActivities));
+    } catch (cacheError) {}
+    
+    return defaultActivities;
   }
-}
+};
 
 // Destinasyonları getir
 export const getDestinations = async (): Promise<any[]> => {
+  // Daima döndürülecek varsayılan destinasyonlar
+  const defaultDestinations = [
+    { id: "default-dest-1", name: "Antalya", country: "Türkiye", description: "Güzel sahiller" },
+    { id: "default-dest-2", name: "İstanbul", country: "Türkiye", description: "Tarihi yarımada" },
+    { id: "default-dest-3", name: "Kapadokya", country: "Türkiye", description: "Peri bacaları" },
+    { id: "default-dest-4", name: "Bodrum", country: "Türkiye", description: "Güzel koylar" },
+    { id: "default-dest-5", name: "Fethiye", country: "Türkiye", description: "Oludeniz" }
+  ];
+
   try {
-    const allDestinations = await getAllData("destinations")
-    return allDestinations
+    // Önce localStorage'dan yüklemeyi dene
+    try {
+      const cachedDestinations = localStorage.getItem('destinations');
+      if (cachedDestinations) {
+        try {
+          const parsedDestinations = JSON.parse(cachedDestinations);
+          if (parsedDestinations && Array.isArray(parsedDestinations) && parsedDestinations.length > 0) {
+            console.log("Destinasyonlar önbellekten yüklendi:", parsedDestinations.length, "adet");
+            // Önbellekteki verilere varsayılan destinasyonları ekle (tekrarları önlemek için ID kontrolü yap)
+            const combinedDestinations = [...parsedDestinations];
+            defaultDestinations.forEach(dest => {
+              if (!combinedDestinations.some(existing => existing.id === dest.id)) {
+                combinedDestinations.push(dest);
+              }
+            });
+            return combinedDestinations;
+          }
+        } catch (parseError) {
+          console.error("Destinasyon JSON parse hatası:", parseError);
+          // JSON parse hatası durumunda varsayılan verileri önbelleğe kaydet ve kullan
+          try {
+            localStorage.setItem('destinations', JSON.stringify(defaultDestinations));
+          } catch (e) {}
+          return defaultDestinations;
+        }
+      }
+    } catch (cacheError) {
+      console.warn("Destinasyonlar önbellekten yüklenemedi:", cacheError);
+      // Önbellek hatası olursa IndexedDB'den devam et
+    }
+    
+    // IndexedDB'den yüklemeye çalış
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      try {
+        if (!db.objectStoreNames.contains("destinations")) {
+          console.log("'destinations' deposu bulunamadı, varsayılan veriler kullanılıyor");
+          db.close();
+          resolve(defaultDestinations);
+          return;
+        }
+
+        const transaction = db.transaction("destinations", "readonly");
+        const store = transaction.objectStore("destinations");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const results = request.result || [];
+          console.log("Yüklenen destinasyonlar:", results.length, "adet");
+          
+          if (results.length > 0) {
+            // Veri tabanındaki verilere varsayılan destinasyonları ekle
+            const combinedDestinations = [...results];
+            defaultDestinations.forEach(dest => {
+              if (!combinedDestinations.some(existing => existing.id === dest.id)) {
+                combinedDestinations.push(dest);
+              }
+            });
+            
+            try {
+              localStorage.setItem('destinations', JSON.stringify(combinedDestinations));
+            } catch (cacheError) {
+              console.warn("Destinasyonlar önbelleğe kaydedilemedi:", cacheError);
+            }
+            
+            resolve(combinedDestinations);
+          } else {
+            // Veri tabanında veri yoksa varsayılan destinasyonları kullan
+            try {
+              localStorage.setItem('destinations', JSON.stringify(defaultDestinations));
+            } catch (e) {}
+            resolve(defaultDestinations);
+          }
+        };
+
+        request.onerror = () => {
+          console.error("Destinasyonlar alınırken hata:", request.error);
+          db.close();
+          // Hata durumunda varsayılan verileri kullan
+          resolve(defaultDestinations);
+        };
+
+        transaction.oncomplete = () => {
+          db.close();
+        };
+      } catch (txError) {
+        console.error("Destinasyon transaction hatası:", txError);
+        try { db.close(); } catch (e) {}
+        // Hata durumunda varsayılan verileri kullan
+        resolve(defaultDestinations);
+      }
+    });
   } catch (error) {
-    console.error("Destinasyonlar alınırken hata:", error)
-    return []
+    console.error("Destinasyon yükleme hatası:", error);
+    
+    // Herhangi bir hata durumunda varsayılan destinasyonları döndür
+    try {
+      localStorage.setItem('destinations', JSON.stringify(defaultDestinations));
+    } catch (cacheError) {}
+    
+    return defaultDestinations;
   }
-}
+};
 
 // AI ayarlarını kaydet
 export const saveAISettings = async (settings: any): Promise<any> => {
@@ -412,3 +781,172 @@ function generateUUID() {
   })
 }
 
+// Referans kaynaklarını kaydet
+export const saveReferralSources = async (sources: any[]): Promise<void> => {
+  try {
+    // Önce mevcut referans kaynaklarını temizle
+    await clearStore("referral_sources")
+
+    // Sonra yeni referans kaynaklarını ekle
+    for (const source of sources) {
+      await addData("referral_sources", source)
+    }
+
+    // Önbellekte de sakla
+    try {
+      localStorage.setItem('referralSources', JSON.stringify(sources));
+    } catch (e) {
+      console.warn("Referans kaynakları önbellekte saklanamadı:", e);
+    }
+  } catch (error) {
+    console.error("Referans kaynakları kaydedilirken hata:", error)
+    throw error
+  }
+};
+
+// Destinasyonları kaydet
+export const saveDestinations = async (destinations: any[]): Promise<void> => {
+  try {
+    // Önce localStorage'a kaydet (hızlı erişim için)
+    try {
+      localStorage.setItem('destinations', JSON.stringify(destinations));
+      console.log("Destinasyonlar önbelleğe kaydedildi:", destinations.length);
+    } catch (storageError) {
+      console.warn("LocalStorage erişim hatası:", storageError);
+    }
+
+    // Veritabanında mevcut verileri temizle
+    await clearStore("destinations");
+
+    // Yeni verileri ekle
+    for (const destination of destinations) {
+      await addData("destinations", destination);
+    }
+    
+    console.log("Destinasyonlar veritabanına kaydedildi:", destinations.length);
+  } catch (error) {
+    console.error("Destinasyonlar kaydedilirken hata:", error);
+    throw error;
+  }
+};
+
+// Referans kaynaklarını getir
+export const getReferralSources = async (): Promise<any[]> => {
+  // Varsayılan referans kaynakları (Tamamen Türkçe)
+  const defaultReferralSources = [
+    { id: "website", name: "İnternet Sitemiz", type: "çevrimiçi", isDefault: true },
+    { id: "hotel", name: "Otel Yönlendirmesi", type: "iş ortağı", isDefault: true },
+    { id: "local_guide", name: "Hanutçu / Yerel Rehber", type: "iş ortağı", isDefault: true },
+    { id: "walk_in", name: "Kapı Önü Müşterisi", type: "doğrudan", isDefault: true },
+    { id: "repeat", name: "Tekrar Gelen Müşteri", type: "doğrudan", isDefault: true },
+    { id: "recommendation", name: "Tavsiye", type: "organik", isDefault: true },
+    { id: "social_media", name: "Sosyal Medya", type: "çevrimiçi", isDefault: true },
+    { id: "other", name: "Diğer", type: "diğer", isDefault: true }
+  ];
+
+  try {
+    // Önce localStorage'dan kontrol et
+    try {
+      const cachedData = localStorage.getItem('referralSources');
+      if (cachedData) {
+        try {
+          const parsedData = JSON.parse(cachedData);
+          if (parsedData && Array.isArray(parsedData) && parsedData.length > 0) {
+            console.log("Referans kaynakları önbellekten yüklendi:", parsedData.length);
+            return parsedData;
+          }
+        } catch (parseError) {
+          console.error("JSON ayrıştırma hatası:", parseError);
+        }
+      }
+    } catch (storageError) {
+      console.warn("LocalStorage erişim hatası:", storageError);
+    }
+    
+    // Veri tabanından yüklemeyi dene
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      try {
+        if (!db.objectStoreNames.contains("referral_sources")) {
+          console.log("'referral_sources' deposu bulunamadı, varsayılan veriler kullanılıyor");
+          db.close();
+          
+          // Önbelleğe kaydet
+          try {
+            localStorage.setItem('referralSources', JSON.stringify(defaultReferralSources));
+          } catch (e) {}
+          
+          resolve(defaultReferralSources);
+          return;
+        }
+
+        const transaction = db.transaction("referral_sources", "readonly");
+        const store = transaction.objectStore("referral_sources");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const sources = request.result || [];
+          console.log("Yüklenen referans kaynakları:", sources.length, "adet");
+          
+          if (sources.length > 0) {
+            // Önbelleğe kaydet
+            try {
+              localStorage.setItem('referralSources', JSON.stringify(sources));
+            } catch (cacheError) {
+              console.warn("Referans kaynakları önbelleğe kaydedilemedi:", cacheError);
+            }
+            
+            resolve(sources);
+          } else {
+            console.log("Veri tabanında referans kaynağı bulunamadı, varsayılan veriler kullanılıyor");
+            
+            // Varsayılan verileri kaydet
+            saveReferralSources(defaultReferralSources)
+              .then(() => {
+                resolve(defaultReferralSources);
+              })
+              .catch((saveError) => {
+                console.error("Varsayılan referans kaynakları kaydedilemedi:", saveError);
+                resolve(defaultReferralSources);
+              });
+          }
+        };
+
+        request.onerror = () => {
+          console.error("Referans kaynakları alınırken hata:", request.error);
+          db.close();
+          
+          // Önbelleğe kaydet
+          try {
+            localStorage.setItem('referralSources', JSON.stringify(defaultReferralSources));
+          } catch (e) {}
+          
+          resolve(defaultReferralSources);
+        };
+
+        transaction.oncomplete = () => {
+          db.close();
+        };
+      } catch (txError) {
+        console.error("Referans kaynakları transaction hatası:", txError);
+        try { db.close(); } catch (e) {}
+        
+        // Önbelleğe kaydet
+        try {
+          localStorage.setItem('referralSources', JSON.stringify(defaultReferralSources));
+        } catch (e) {}
+        
+        resolve(defaultReferralSources);
+      }
+    });
+  } catch (error) {
+    console.error("Referans kaynakları yükleme hatası:", error);
+    
+    // Önbelleğe kaydet
+    try {
+      localStorage.setItem('referralSources', JSON.stringify(defaultReferralSources));
+    } catch (e) {}
+    
+    return defaultReferralSources;
+  }
+};

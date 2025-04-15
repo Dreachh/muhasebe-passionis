@@ -9,6 +9,10 @@ export const loadSavedData = async () => {
     const savedToursData = localStorage.getItem("toursData")
     const toursData = savedToursData ? JSON.parse(savedToursData) : []
 
+    // Müşteri verilerini yükle
+    const savedCustomerData = localStorage.getItem("customerData")
+    const customerData = savedCustomerData ? JSON.parse(savedCustomerData) : []
+
     // Şirket bilgilerini yükle
     const savedCompanyInfo = localStorage.getItem("companyInfo")
     const companyInfo = savedCompanyInfo
@@ -39,10 +43,10 @@ export const loadSavedData = async () => {
           roundPrices: true,
         }
 
-    return { financialData, toursData, companyInfo, preferences }
+    return { financialData, toursData, customerData, companyInfo, preferences }
   } catch (error) {
     console.error("Veri yükleme hatası:", error)
-    return { financialData: [], toursData: [], companyInfo: {}, preferences: {} }
+    return { financialData: [], toursData: [], customerData: [], companyInfo: {}, preferences: {} }
   }
 }
 
@@ -62,6 +66,7 @@ export const clearData = async () => {
   try {
     localStorage.removeItem("financialData")
     localStorage.removeItem("toursData")
+    localStorage.removeItem("customerData")
     return true
   } catch (error) {
     console.error("Veri temizleme hatası:", error)
@@ -139,4 +144,3 @@ export const convertCurrency = (amount, fromCurrency, toCurrency, rates) => {
 
   return amount
 }
-

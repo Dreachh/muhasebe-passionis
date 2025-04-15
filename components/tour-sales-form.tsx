@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Plus, Trash2, Save, ArrowRight, ArrowLeft, Check, Printer, Settings, AlertCircle, CircleSlash } from "lucide-react"
-import { getExpenseTypes, getProviders, getActivities, getDestinations } from "@/lib/db"
+import { getExpenseTypes, getProviders, getActivities, getDestinations, getReferralSources } from "@/lib/db"
 import { useToast } from "@/components/ui/use-toast"
 import { Checkbox } from "@/components/ui/checkbox"
 
@@ -47,7 +47,9 @@ export function TourSalesForm({
   const [providers, setProviders] = useState([])
   const [activities, setActivities] = useState([])
   const [destinations, setDestinations] = useState([])
+  const [referralSources, setReferralSources] = useState([])
   const [expenseCategories, setExpenseCategories] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
   // Adım göstergesi için referans
   const stepsRef = useRef(null)
@@ -72,6 +74,8 @@ export function TourSalesForm({
       customerEmail: "",
       customerAddress: "",
       customerIdNumber: "",
+      nationality: "", // Müşterinin vatandaşlık/ülke bilgisi
+      referralSource: "", // Müşterinin nereden geldiği/bulduğu bilgisi
       additionalCustomers: [],
       tourName: "",
       tourDate: new Date().toISOString().split("T")[0],
@@ -94,12 +98,178 @@ export function TourSalesForm({
     }
   })
 
+  // initialData değişikliklerini izle
+  useEffect(() => {
+    if (initialData) {
+      console.log("Tour edit data received:", initialData);
+      // Düzenlenecek tur verilerini forma yükle
+      const formData = {
+        ...initialData,
+        id: initialData.id || generateUUID(),
+        tourDate: initialData.tourDate || new Date().toISOString().split("T")[0],
+        tourEndDate: initialData.tourEndDate || "",
+        serialNumber: initialData.serialNumber || "",
+        tourName: initialData.tourName || "",
+        customerName: initialData.customerName || "",
+        customerPhone: initialData.customerPhone || "",
+        customerEmail: initialData.customerEmail || "",
+        customerIdNumber: initialData.customerIdNumber || "",
+        customerAddress: initialData.customerAddress || "",
+        nationality: initialData.nationality || "", // Vatandaşlık/ülke bilgisi
+        numberOfPeople: initialData.numberOfPeople || 1,
+        numberOfChildren: initialData.numberOfChildren || 0,
+        pricePerPerson: initialData.pricePerPerson || "",
+        totalPrice: initialData.totalPrice || "",
+        currency: initialData.currency || "TRY",
+        paymentStatus: initialData.paymentStatus || "pending",
+        paymentMethod: initialData.paymentMethod || "cash",
+        partialPaymentAmount: initialData.partialPaymentAmount || "",
+        partialPaymentCurrency: initialData.partialPaymentCurrency || "TRY",
+        notes: initialData.notes || "",
+        expenses: initialData.expenses || [],
+        activities: initialData.activities || [],
+        destinationId: initialData.destinationId || "",
+      };
+      
+      // Form verilerini güncelle
+      setFormData(formData);
+    }
+  }, [initialData]);
+
   // Gider türlerini, sağlayıcıları, aktiviteleri ve destinasyonları yükle
   useEffect(() => {
     const loadData = async () => {
+      setIsLoading(true); // Yükleme başladığında yükleme durumunu güncelle
+      
       try {
-        const types = await getExpenseTypes()
-        setExpenseTypes(types || [])
+        console.log('Veri yükleme başlıyor...');
+        
+        // Tüm verileri paralel olarak yükle ve her bir isteğe timeout ekle
+        const fetchWithTimeout = async (fetchPromise, name, fallbackStorageKey) => {
+          // Önce localStorage'dan yüklemeyi dene
+          try {
+            const cachedData = localStorage.getItem(fallbackStorageKey);
+            if (cachedData) {
+              const parsedData = JSON.parse(cachedData);
+              if (parsedData && Array.isArray(parsedData) && parsedData.length > 0) {
+                console.log(`${name} önbellekten yüklendi:`, parsedData.length, 'adet veri');
+                return parsedData;
+              }
+            }
+          } catch (cacheError) {
+            console.warn(`${name} önbellekten yüklenemedi:`, cacheError);
+          }
+          
+          // Önbellekte yoksa API'den yüklemeyi dene
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error(`${name} yüklenirken zaman aşımına uğradı`)), 10000);
+          });
+          
+          try {
+            const result = await Promise.race([fetchPromise, timeoutPromise]);
+            if (result && Array.isArray(result) && result.length > 0) {
+              console.log(`${name} API'den başarıyla yüklendi:`, result.length, 'adet veri');
+              
+              // Başarılı sonuçları önbelleğe kaydet
+              try {
+                localStorage.setItem(fallbackStorageKey, JSON.stringify(result));
+              } catch (storageError) {
+                console.warn(`${name} önbelleğe kaydedilemedi:`, storageError);
+              }
+              
+              return result;
+            } else {
+              console.warn(`${name} API'den yüklendi fakat veri yok veya boş dizi döndü`);
+              throw new Error(`${name} için veri bulunamadı`);
+            }
+          } catch (error) {
+            console.error(`${name} yüklenirken hata:`, error);
+            
+            // Hata durumunda varsayılan veriler
+            if (name === 'Destinasyonlar') {
+              const defaultData = [
+                { id: "default-dest-1", name: "Antalya", country: "Türkiye", description: "Güzel sahiller" },
+                { id: "default-dest-2", name: "İstanbul", country: "Türkiye", description: "Tarihi yarımada" },
+                { id: "default-dest-3", name: "Kapadokya", country: "Türkiye", description: "Peri bacaları" }
+              ];
+              try {
+                localStorage.setItem(fallbackStorageKey, JSON.stringify(defaultData));
+              } catch (storageError) {}
+              return defaultData;
+            } else if (name === 'Aktiviteler') {
+              const defaultData = [
+                { id: "default-act-1", name: "Tekne Turu", destinationId: "default-dest-1", price: "300", currency: "TRY", description: "Güzel bir tekne turu" },
+                { id: "default-act-2", name: "Müze Gezisi", destinationId: "default-dest-2", price: "150", currency: "TRY", description: "Tarihi müze gezisi" },
+                { id: "default-act-3", name: "Balon Turu", destinationId: "default-dest-3", price: "2000", currency: "TRY", description: "Kapadokya'da balon turu" }
+              ];
+              try {
+                localStorage.setItem(fallbackStorageKey, JSON.stringify(defaultData));
+              } catch (storageError) {}
+              return defaultData;
+            }
+            
+            return [];
+          }
+        };
+        
+        // Verileri paralel olarak getir
+        try {
+          console.log('Referans kaynakları ve diğer veriler yükleniyor...');
+          
+          const [types, providersData, activitiesData, destinationsData, referralSourcesData] = await Promise.all([
+            fetchWithTimeout(getExpenseTypes(), 'Gider türleri', 'expenseTypes'),
+            fetchWithTimeout(getProviders(), 'Sağlayıcılar', 'providers'),
+            fetchWithTimeout(getActivities(), 'Aktiviteler', 'activities'),
+            fetchWithTimeout(getDestinations(), 'Destinasyonlar', 'destinations'),
+            fetchWithTimeout(getReferralSources(), 'Referans Kaynakları', 'referralSources')
+          ]);
+          
+          // Verileri yerel değişkenlere kaydet ve null kontrolü yap
+          const typesResult = Array.isArray(types) ? types : [];
+          const providersResult = Array.isArray(providersData) ? providersData : [];
+          const activitiesResult = Array.isArray(activitiesData) ? activitiesData : [];
+          const destinationsResult = Array.isArray(destinationsData) ? destinationsData : [];
+          const referralSourcesResult = Array.isArray(referralSourcesData) ? referralSourcesData : [];
+          
+          // Verileri localStorage'a da kaydet (adımlar arası geçişte kaybolmaması için)
+          try {
+            localStorage.setItem('expenseTypes', JSON.stringify(typesResult));
+            localStorage.setItem('providers', JSON.stringify(providersResult));
+            localStorage.setItem('activities', JSON.stringify(activitiesResult));
+            localStorage.setItem('destinations', JSON.stringify(destinationsResult));
+            localStorage.setItem('referralSources', JSON.stringify(referralSourcesResult));
+            console.log('Tüm veriler localStorage\'a başarıyla kaydedildi');
+          } catch (storageError) {
+            console.warn('Veriler önbelleğe kaydedilemedi:', storageError);
+          }
+          
+          // Verileri state'e kaydet
+          setExpenseTypes(typesResult);
+          setProviders(providersResult);
+          setActivities(activitiesResult);
+          setDestinations(destinationsResult);
+          setReferralSources(referralSourcesResult);
+          
+          console.log('Yüklenen destinasyonlar:', destinationsResult.length, 'adet');
+          console.log('Yüklenen aktiviteler:', activitiesResult.length, 'adet');
+          console.log('Yüklenen referans kaynakları:', referralSourcesResult.length, 'adet');
+        } catch (parallelLoadError) {
+          console.error('Paralel veri yükleme sırasında hata:', parallelLoadError);
+          
+          // Hata durumunda localStorage'dan yüklemeyi dene
+          try {
+            const cachedReferralSources = localStorage.getItem('referralSources');
+            if (cachedReferralSources) {
+              const parsedReferralSources = JSON.parse(cachedReferralSources);
+              if (Array.isArray(parsedReferralSources) && parsedReferralSources.length > 0) {
+                console.log('Referans kaynakları önbellekten yüklendi:', parsedReferralSources.length, 'adet');
+                setReferralSources(parsedReferralSources);
+              }
+            }
+          } catch (cacheError) {
+            console.warn('Referans kaynakları önbellekten yüklenemedi:', cacheError);
+          }
+        }
 
         // Gider kategorilerini oluştur
         const categories = [
@@ -113,28 +283,55 @@ export function TourSalesForm({
           { value: "activity", label: "Aktivite" },
           { value: "general", label: "Genel" },
           { value: "other", label: "Diğer" },
-        ]
-        setExpenseCategories(categories)
-
-        const providersData = await getProviders()
-        setProviders(providersData || [])
-
-        const activitiesData = await getActivities()
-        setActivities(activitiesData || [])
-
-        const destinationsData = await getDestinations()
-        setDestinations(destinationsData || [])
+        ];
+        setExpenseCategories(categories);
+        
+        // Veri yükleme tamamlandı
+        setIsLoading(false);
       } catch (error) {
-        console.error("Veri yüklenirken hata:", error)
-        toast({
-          title: "Hata",
-          description: "Veriler yüklenirken bir hata oluştu.",
-          variant: "destructive",
-        })
+        console.error("Veri yüklenirken hata:", error);
+        
+        // Hata durumunda localStorage'dan veri yüklemeyi dene
+        try {
+          const cachedTypes = localStorage.getItem('expenseTypes');
+          const cachedProviders = localStorage.getItem('providers');
+          const cachedActivities = localStorage.getItem('activities');
+          const cachedDestinations = localStorage.getItem('destinations');
+          const cachedReferralSources = localStorage.getItem('referralSources');
+          
+          if (cachedTypes) setExpenseTypes(JSON.parse(cachedTypes));
+          if (cachedProviders) setProviders(JSON.parse(cachedProviders));
+          if (cachedActivities) setActivities(JSON.parse(cachedActivities));
+          if (cachedDestinations) {
+            const parsedDestinations = JSON.parse(cachedDestinations);
+            setDestinations(parsedDestinations);
+            console.log('Önbellek destinasyonlar yüklendi:', parsedDestinations.length, 'adet');
+          }
+          if (cachedReferralSources) {
+            const parsedReferralSources = JSON.parse(cachedReferralSources);
+            setReferralSources(parsedReferralSources);
+            console.log('Önbellek referans kaynakları yüklendi:', parsedReferralSources.length, 'adet');
+          }
+          
+          toast({
+            title: "Uyarı",
+            description: "Veriler önbellekten yüklendi. Güncel olmayabilir.",
+            variant: "default",
+          });
+        } catch (cacheError) {
+          console.error("Önbellekten veri yükleme hatası:", cacheError);
+          toast({
+            title: "Hata",
+            description: "Veriler yüklenemedi. Lütfen sayfayı yenileyin.",
+            variant: "destructive",
+          });
+        }
+        
+        setIsLoading(false); // Hata durumunda da yükleme durumunu güncelle
       }
-    }
+    };
 
-    loadData()
+    loadData();
   }, [toast])
 
   // Store form data when component unmounts or when navigating away
@@ -183,6 +380,7 @@ export function TourSalesForm({
       name: "",
       phone: "",
       idNumber: "",
+      destinationName: formData.destinationId ? destinations.find(d => d.id === formData.destinationId)?.name : "",
     }
 
     setFormData((prev) => ({
@@ -203,9 +401,18 @@ export function TourSalesForm({
   const updateAdditionalCustomer = (id, field, value) => {
     setFormData((prev) => ({
       ...prev,
-      additionalCustomers: prev.additionalCustomers.map((customer) =>
-        customer.id === id ? { ...customer, [field]: value } : customer,
-      ),
+      additionalCustomers: prev.additionalCustomers.map((customer) => {
+        if (customer.id === id) {
+          const updatedCustomer = { ...customer, [field]: value };
+          // Eğer destinasyon değiştiyse, destinasyon adını da güncelle
+          if (field === 'destinationId') {
+            const destination = destinations.find(d => d.id === value);
+            updatedCustomer.destinationName = destination ? destination.name : '';
+          }
+          return updatedCustomer;
+        }
+        return customer;
+      }),
     }))
   }
 
@@ -271,9 +478,11 @@ export function TourSalesForm({
       date: "",
       duration: "",
       price: "",
-      currency: "TRY",
+      currency: formData.currency || "TRY",
       providerId: "",
       details: "",
+      participants: Number(formData.numberOfPeople) || 0, // Varsayılan olarak toplam kişi sayısını kullan
+      participantsType: "all", // all: tüm katılımcılar, custom: özel sayı
     }
 
     setFormData((prev) => ({
@@ -313,16 +522,21 @@ export function TourSalesForm({
         return activity
       })
 
-      // Eğer fiyat değiştiyse toplam fiyatı güncelle
-      if (field === "price" || field === "activityId") {
+      // Eğer fiyat, aktivite ID'si veya katılımcı sayısı değiştiyse toplam fiyatı güncelle
+      if (field === "price" || field === "activityId" || field === "participants" || field === "participantsType") {
         // Toplam aktivite fiyatını hesapla
         let totalActivityPrice = 0
 
         updatedActivities.forEach((activity) => {
           if (activity.price) {
             const activityPrice = Number.parseFloat(activity.price)
-            // Kişi başı fiyat olarak hesapla
-            totalActivityPrice += activityPrice * Number.parseInt(prev.numberOfPeople)
+            // Aktivite için belirtilen katılımcı sayısını kullan
+            const activityParticipants = activity.participantsType === "all" ? 
+              Number.parseInt(prev.numberOfPeople) : 
+              Number.parseInt(activity.participants.toString())
+            
+            console.log(`Aktivite: ${activity.name}, Fiyat: ${activityPrice}, Katılımcı: ${activityParticipants}`);
+            totalActivityPrice += activityPrice * activityParticipants
           }
         })
 
@@ -346,16 +560,283 @@ export function TourSalesForm({
 
   const nextStep = () => {
     if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1)
+      // Destinasyon ve aktivite verilerinin tutarlılığını kontrol et
+      if (currentStep === 0 || currentStep === 2) {
+        // Eğer ikinci adıma (tur detayları) veya dördüncü adıma (aktiviteler) geçiyorsak
+        // verilerin yüklü olduğundan emin ol
+        ensureDataLoaded();
+      }
+      setCurrentStep(currentStep + 1);
     }
   }
 
   const prevStep = () => {
     if (currentStep > 0) {
-      setCurrentStep(currentStep - 1)
+      // Destinasyon ve aktivite verilerinin tutarlılığını kontrol et
+      if (currentStep === 2 || currentStep === 4) {
+        // Eğer ikinci adımdan (tur detayları) veya dördüncü adımdan (aktiviteler) geri dönüyorsak
+        // verilerin yüklü olduğundan emin ol
+        ensureDataLoaded();
+      }
+      setCurrentStep(currentStep - 1);
+    }
+  }
+  
+  // Verilerin yüklü olduğundan emin ol
+  const ensureDataLoaded = () => {
+    console.log('Veri tutarlılığı kontrol ediliyor...');
+    let dataLoadingStarted = false;
+    
+    // Yükleme durumunu kontrol et ve başlat
+    const startLoading = () => {
+      if (!dataLoadingStarted) {
+        dataLoadingStarted = true;
+        setIsLoading(true);
+        toast({
+          title: "Veriler Yükleniyor",
+          description: "Destinasyonlar ve diğer veriler yükleniyor, lütfen bekleyin...",
+          variant: "default",
+        });
+      }
+    };
+    
+    // Yükleme tamamlandığında kontrol et
+    const checkLoadingComplete = () => {
+      // Veriler yüklendiyse yükleme durumunu güncelle
+      if (destinations.length > 0 && activities.length > 0 && providers.length > 0 && referralSources.length > 0) {
+        setIsLoading(false);
+        toast({
+          title: "Veriler Hazır",
+          description: "Tüm veriler başarıyla yüklendi.",
+          variant: "default",
+        });
+        return true;
+      }
+      return false;
+    };
+    
+    // Verileri doğrudan API'den yükle (localStorage'a güvenme)
+    const forceLoadData = async () => {
+      startLoading();
+      
+      // Destinasyonları yükle
+      try {
+        console.log('Destinasyonlar yükleniyor...');
+        const destData = await getDestinations();
+        if (destData && destData.length > 0) {
+          setDestinations(destData);
+          localStorage.setItem('destinations', JSON.stringify(destData));
+          console.log('Destinasyonlar yüklendi:', destData.length, 'adet');
+        } else {
+          console.error('Destinasyon verisi boş veya geçersiz');
+        }
+      } catch (err) {
+        console.error('Destinasyon yükleme hatası:', err);
+      }
+      
+      // Aktiviteleri yükle
+      try {
+        console.log('Aktiviteler yükleniyor...');
+        const actData = await getActivities();
+        if (actData && actData.length > 0) {
+          setActivities(actData);
+          localStorage.setItem('activities', JSON.stringify(actData));
+          console.log('Aktiviteler yüklendi:', actData.length, 'adet');
+        } else {
+          console.error('Aktivite verisi boş veya geçersiz');
+        }
+      } catch (err) {
+        console.error('Aktivite yükleme hatası:', err);
+      }
+      
+      // Sağlayıcıları yükle
+      try {
+        console.log('Sağlayıcılar yükleniyor...');
+        const provData = await getProviders();
+        if (provData && provData.length > 0) {
+          setProviders(provData);
+          localStorage.setItem('providers', JSON.stringify(provData));
+          console.log('Sağlayıcılar yüklendi:', provData.length, 'adet');
+        } else {
+          console.error('Sağlayıcı verisi boş veya geçersiz');
+        }
+      } catch (err) {
+        console.error('Sağlayıcı yükleme hatası:', err);
+      }
+      
+      // Referans kaynaklarını yükle
+      try {
+        console.log('Referans kaynakları yükleniyor...');
+        const refData = await getReferralSources();
+        if (refData && refData.length > 0) {
+          setReferralSources(refData);
+          localStorage.setItem('referralSources', JSON.stringify(refData));
+          console.log('Referans kaynakları yüklendi:', refData.length, 'adet');
+        } else {
+          console.error('Referans kaynakları verisi boş veya geçersiz');
+        }
+      } catch (err) {
+        console.error('Referans kaynakları yükleme hatası:', err);
+      }
+      
+      // Yükleme tamamlandı
+      checkLoadingComplete();
+    };
+    
+    // Destinasyonların yüklü olup olmadığını kontrol et
+    if (destinations.length === 0) {
+      startLoading();
+      
+      console.log('Destinasyonlar eksik, önbellekten yükleniyor...');
+      try {
+        const cachedDestinations = localStorage.getItem('destinations');
+        if (cachedDestinations) {
+          const parsedDestinations = JSON.parse(cachedDestinations);
+          if (parsedDestinations && parsedDestinations.length > 0) {
+            setDestinations(parsedDestinations);
+            console.log('Önbellek destinasyonlar yüklendi:', parsedDestinations.length, 'adet');
+          } else {
+            // Önbellekte geçersiz veri varsa, doğrudan yükle
+            forceLoadData();
+            return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+          }
+        } else {
+          // Önbellekte yoksa, doğrudan yükle
+          forceLoadData();
+          return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+        }
+      } catch (error) {
+        console.error('Destinasyon önbellek yükleme hatası:', error);
+        // Hata durumunda doğrudan yükle
+        forceLoadData();
+        return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+      }
+    }
+    
+    // Aktivitelerin yüklü olup olmadığını kontrol et
+    if (activities.length === 0) {
+      startLoading();
+      
+      console.log('Aktiviteler eksik, önbellekten yükleniyor...');
+      try {
+        const cachedActivities = localStorage.getItem('activities');
+        if (cachedActivities) {
+          const parsedActivities = JSON.parse(cachedActivities);
+          if (parsedActivities && parsedActivities.length > 0) {
+            setActivities(parsedActivities);
+            console.log('Önbellek aktiviteler yüklendi:', parsedActivities.length, 'adet');
+          } else {
+            // Önbellekte geçersiz veri varsa, doğrudan yükle
+            forceLoadData();
+            return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+          }
+        } else {
+          // Önbellekte yoksa, doğrudan yükle
+          forceLoadData();
+          return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+        }
+      } catch (error) {
+        console.error('Aktivite önbellek yükleme hatası:', error);
+        // Hata durumunda doğrudan yükle
+        forceLoadData();
+        return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+      }
+    }
+    
+    // Sağlayıcıların yüklü olup olmadığını kontrol et
+    if (providers.length === 0) {
+      startLoading();
+      
+      console.log('Sağlayıcılar eksik, önbellekten yükleniyor...');
+      try {
+        const cachedProviders = localStorage.getItem('providers');
+        if (cachedProviders) {
+          const parsedProviders = JSON.parse(cachedProviders);
+          if (parsedProviders && parsedProviders.length > 0) {
+            setProviders(parsedProviders);
+            console.log('Önbellek sağlayıcılar yüklendi:', parsedProviders.length, 'adet');
+          } else {
+            // Önbellekte geçersiz veri varsa, doğrudan yükle
+            forceLoadData();
+            return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+          }
+        } else {
+          // Önbellekte yoksa, doğrudan yükle
+          forceLoadData();
+          return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+        }
+      } catch (error) {
+        console.error('Sağlayıcı önbellek yükleme hatası:', error);
+        // Hata durumunda doğrudan yükle
+        forceLoadData();
+        return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+      }
+    }
+    
+    // Referans kaynaklarının yüklü olup olmadığını kontrol et
+    if (referralSources.length === 0) {
+      startLoading();
+      
+      console.log('Referans kaynakları eksik, önbellekten yükleniyor...');
+      try {
+        const cachedReferralSources = localStorage.getItem('referralSources');
+        if (cachedReferralSources) {
+          const parsedReferralSources = JSON.parse(cachedReferralSources);
+          if (parsedReferralSources && parsedReferralSources.length > 0) {
+            setReferralSources(parsedReferralSources);
+            console.log('Önbellek referans kaynakları yüklendi:', parsedReferralSources.length, 'adet');
+          } else {
+            // Önbellekte geçersiz veri varsa, doğrudan yükle
+            forceLoadData();
+            return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+          }
+        } else {
+          // Önbellekte yoksa, doğrudan yükle
+          forceLoadData();
+          return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+        }
+      } catch (error) {
+        console.error('Referans kaynakları önbellek yükleme hatası:', error);
+        // Hata durumunda doğrudan yükle
+        forceLoadData();
+        return; // Doğrudan yükleme başladı, diğer kontrolleri atlayabilirsin
+      }
+    }
+    
+    // Tüm veriler önbellekten yüklendiyse, yükleme durumunu güncelle
+    if (dataLoadingStarted) {
+      checkLoadingComplete();
     }
   }
 
+  // Analiz verilerini güncelleme fonksiyonu
+  const updateAnalysisData = (tourAnalysis) => {
+    try {
+      // Mevcut analiz verilerini al
+      const savedAnalysisData = localStorage.getItem('analysisData') || '{"tours": [], "finances": []}';
+      const analysisData = JSON.parse(savedAnalysisData);
+      
+      // Tur analizini ekle
+      if (!analysisData.tours) {
+        analysisData.tours = [];
+      }
+      
+      // Aynı ID'ye sahip tur varsa güncelle, yoksa ekle
+      const existingIndex = analysisData.tours.findIndex(tour => tour.tourId === tourAnalysis.tourId);
+      if (existingIndex >= 0) {
+        analysisData.tours[existingIndex] = tourAnalysis;
+      } else {
+        analysisData.tours.push(tourAnalysis);
+      }
+      
+      // Analiz verilerini kaydet
+      localStorage.setItem('analysisData', JSON.stringify(analysisData));
+      console.log("Analiz verileri güncellendi");
+    } catch (error) {
+      console.error("Analiz verileri güncellenirken hata:", error);
+    }
+  };
+  
   const handleSubmit = (e) => {
     if (e) e.preventDefault()
 
@@ -368,6 +849,167 @@ export function TourSalesForm({
       totalPrice: Number.parseFloat(formData.totalPrice),
       partialPaymentAmount: formData.partialPaymentAmount ? Number.parseFloat(formData.partialPaymentAmount) : 0,
       updatedAt: new Date().toISOString(),
+    }
+    
+    // Tur analizi için gerekli verileri hazırla
+    const tourAnalysis = {
+      // Genel tur bilgileri
+      tourId: submissionData.id,
+      tourName: submissionData.tourName,
+      destinationId: submissionData.destinationId,
+      destinationName: getDestinationName(submissionData.destinationId),
+      tourDate: submissionData.tourDate,
+      tourEndDate: submissionData.tourEndDate,
+      
+      // Ana müşteri bilgileri
+      mainCustomer: {
+        name: submissionData.customerName,
+        phone: submissionData.customerPhone,
+        email: submissionData.customerEmail,
+        idNumber: submissionData.customerIdNumber,
+        isMainContact: true
+      },
+      
+      // Yolcu bilgileri
+      passengers: [
+        // Ana müşteriyi de yolcu olarak ekle
+        {
+          name: submissionData.customerName,
+          phone: submissionData.customerPhone,
+          email: submissionData.customerEmail,
+          idNumber: submissionData.customerIdNumber,
+          isMainContact: true
+        },
+        // Ek yolcuları ekle
+        ...submissionData.additionalCustomers.map(customer => ({
+          name: customer.name,
+          phone: customer.phone,
+          idNumber: customer.idNumber,
+          isMainContact: false
+        }))
+      ],
+      
+      // Katılımcı bilgileri
+      totalParticipants: submissionData.numberOfPeople,
+      childParticipants: submissionData.numberOfChildren,
+      adultParticipants: submissionData.numberOfPeople - submissionData.numberOfChildren,
+      
+      // Finansal bilgiler
+      pricePerPerson: submissionData.pricePerPerson,
+      totalPrice: submissionData.totalPrice,
+      paymentStatus: submissionData.paymentStatus,
+      paymentMethod: submissionData.paymentMethod,
+      partialPaymentAmount: submissionData.partialPaymentAmount,
+      partialPaymentCurrency: submissionData.partialPaymentCurrency,
+      currency: submissionData.currency,
+      // Kur bilgisi için açık etiketler
+      currencyLabel: submissionData.currency === "TRY" ? "Türk Lirası" : 
+                    submissionData.currency === "USD" ? "Amerikan Doları" : 
+                    submissionData.currency === "EUR" ? "Euro" : 
+                    submissionData.currency === "GBP" ? "İngiliz Sterlini" : submissionData.currency,
+      currencySymbol: submissionData.currency === "TRY" ? "₺" : 
+                     submissionData.currency === "USD" ? "$" : 
+                     submissionData.currency === "EUR" ? "€" : 
+                     submissionData.currency === "GBP" ? "£" : submissionData.currency,
+      
+      // Aktivite bilgileri
+      activities: submissionData.activities.map(activity => ({
+        activityId: activity.activityId,
+        activityName: getActivityName(activity.activityId),
+        participants: activity.participantsType === "all" ? submissionData.numberOfPeople : activity.participants,
+        participantsType: activity.participantsType,
+        price: activity.price,
+        currency: activity.currency,
+        totalActivityPrice: Number(activity.price) * (activity.participantsType === "all" ? submissionData.numberOfPeople : activity.participants)
+      })),
+      
+      // Gider bilgileri
+      expenses: submissionData.expenses.map(expense => ({
+        expenseType: expense.type,
+        expenseName: expense.name,
+        amount: expense.amount,
+        currency: expense.currency,
+        isIncludedInPrice: expense.isIncludedInPrice
+      })),
+      
+      // Analiz tarihi
+      analysisDate: new Date().toISOString(),
+    }
+    
+    // Analiz verilerini submissionData'ya ekle
+    submissionData.analysis = tourAnalysis;
+    console.log("Tur analizi oluşturuldu:", tourAnalysis);
+    
+    // Tur verilerini localStorage'a kaydet (yazdırma ve analiz için)
+    try {
+      // Ana müşteri bilgisini doğru şekilde ayarla
+      const tourDataWithCustomer = {
+        ...submissionData,
+        // Ana müşteri bilgisini açıkça belirt
+        mainCustomer: {
+          name: submissionData.customerName,
+          phone: submissionData.customerPhone,
+          email: submissionData.customerEmail,
+          idNumber: submissionData.customerIdNumber,
+          isMainContact: true
+        },
+        // Yolcu bilgilerini açıkça belirt
+        passengers: [
+          // Ana müşteriyi de yolcu olarak ekle
+          {
+            name: submissionData.customerName,
+            phone: submissionData.customerPhone,
+            email: submissionData.customerEmail,
+            idNumber: submissionData.customerIdNumber,
+            isMainContact: true
+          },
+          // Ek yolcuları ekle
+          ...submissionData.additionalCustomers.map(customer => ({
+            name: customer.name,
+            phone: customer.phone,
+            idNumber: customer.idNumber,
+            isMainContact: false
+          }))
+        ]
+      };
+      
+      // Her durumda tur verilerini kaydet (analiz için)
+      console.log("Tur analizi için veri kaydediliyor...");
+      localStorage.setItem('tourAnalysisData', JSON.stringify(tourAnalysis));
+      console.log("Tur analizi verileri localStorage'a kaydedildi");
+      
+      // Yazdırma için tur verilerini kaydet - müşteri bilgisi içeren versiyonu kullan
+      console.log("Tur yazdırma için veri kaydediliyor...");
+      localStorage.setItem('printTourData', JSON.stringify(tourDataWithCustomer));
+      console.log("Yazdırma verileri localStorage'a kaydedildi");
+      
+      // Tur raporları için veri kaydet
+      const savedTourReports = localStorage.getItem('tourReports') || '[]';
+      const tourReports = JSON.parse(savedTourReports);
+      tourReports.push({
+        id: submissionData.id,
+        tourName: submissionData.tourName,
+        customerName: submissionData.customerName,
+        mainCustomer: {
+          name: submissionData.customerName,
+          phone: submissionData.customerPhone,
+          email: submissionData.customerEmail,
+          idNumber: submissionData.customerIdNumber
+        },
+        destinationName: getDestinationName(submissionData.destinationId),
+        tourDate: submissionData.tourDate,
+        totalPrice: submissionData.totalPrice,
+        currency: submissionData.currency,
+        paymentStatus: submissionData.paymentStatus,
+        createdAt: new Date().toISOString()
+      });
+      localStorage.setItem('tourReports', JSON.stringify(tourReports));
+      console.log("Tur rapor verileri güncellendi");
+      
+      // Analiz verilerini güncelle
+      updateAnalysisData(tourAnalysis);
+    } catch (error) {
+      console.error("Tur verileri kaydedilirken hata:", error);
     }
 
     onSave(submissionData)
@@ -494,6 +1136,35 @@ export function TourSalesForm({
           <div>
             <span className="text-sm text-muted-foreground">TC/Pasaport No:</span>
             <p>{formData.customerIdNumber}</p>
+          </div>
+          <div>
+            <span className="text-sm text-muted-foreground">Vatandaşlık / Ülke:</span>
+            <p>{formData.customerNationality || "-"}</p>
+          </div>
+          <div>
+            <span className="text-sm text-muted-foreground">Referans Kaynağı:</span>
+            <p>
+              {(() => {
+                // Önce referralSources içinde ara
+                if (referralSources && referralSources.length > 0) {
+                  const source = referralSources.find(s => s.id === formData.referralSource);
+                  if (source) return source.name;
+                }
+                
+                // Bulunamazsa varsayılan değerlere bak
+                switch(formData.referralSource) {
+                  case "website": return "İnternet Sitemiz";
+                  case "hotel": return "Otel Yönlendirmesi";
+                  case "local_guide": return "Hanutçu / Yerel Rehber";
+                  case "walk_in": return "Kapı Önü Müşterisi";
+                  case "repeat": return "Tekrar Gelen Müşteri";
+                  case "recommendation": return "Tavsiye";
+                  case "social_media": return "Sosyal Medya";
+                  case "other": return "Diğer";
+                  default: return formData.referralSource || "-";
+                }
+              })()}
+            </p>
           </div>
         </div>
 
@@ -843,6 +1514,79 @@ export function TourSalesForm({
                   placeholder="Kimlik numarası"
                 />
               </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nationality">Vatandaşlık / Ülke</Label>
+                  <Select
+                    value={formData.nationality}
+                    onValueChange={(value) => handleSelectChange("nationality", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Ülke seçin" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[200px] overflow-y-auto">
+                      {/* Ülke listesini countries.ts dosyasından al */}
+                      {(() => {
+                        try {
+                          // Dinamik olarak ülke listesini import et
+                          const countriesList = require("@/lib/countries").countries;
+                          return countriesList.map((country, index) => (
+                            <SelectItem key={country.code + '-' + index} value={country.name}>{country.name}</SelectItem>
+                          ));
+                        } catch (error) {
+                          console.error("Ülke listesi yüklenemedi:", error);
+                          // Hata durumunda en yaygın ülkeleri göster
+                          return [
+                            <SelectItem key="TR" value="Türkiye">Türkiye</SelectItem>,
+                            <SelectItem key="DE" value="Almanya">Almanya</SelectItem>,
+                            <SelectItem key="GB" value="Birleşik Krallık">Birleşik Krallık</SelectItem>,
+                            <SelectItem key="US" value="Amerika Birleşik Devletleri">Amerika Birleşik Devletleri</SelectItem>,
+                            <SelectItem key="RU" value="Rusya">Rusya</SelectItem>,
+                            <SelectItem key="FR" value="Fransa">Fransa</SelectItem>,
+                            <SelectItem key="NL" value="Hollanda">Hollanda</SelectItem>,
+                            <SelectItem key="UA" value="Ukrayna">Ukrayna</SelectItem>,
+                            <SelectItem key="IT" value="İtalya">İtalya</SelectItem>,
+                            <SelectItem key="other" value="Diğer">Diğer</SelectItem>
+                          ];
+                        }
+                      })()} 
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="referralSource">Müşteriyi Nereden Bulduk?</Label>
+                  <Select
+                    value={formData.referralSource}
+                    onValueChange={(value) => handleSelectChange("referralSource", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Referans kaynağı seçin" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {referralSources && referralSources.length > 0 ? (
+                        // Veritabanından yüklenen referans kaynaklarını kullan
+                        referralSources.map((source) => (
+                          <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>
+                        ))
+                      ) : (
+                        // Varsayılan referans kaynaklarını göster (yükleme başarısız olduğunda)
+                        <>
+                          <SelectItem value="website">İnternet Sitemiz</SelectItem>
+                          <SelectItem value="hotel">Otel Yönlendirmesi</SelectItem>
+                          <SelectItem value="local_guide">Hanutçu / Yerel Rehber</SelectItem>
+                          <SelectItem value="walk_in">Kapı Önü Müşterisi</SelectItem>
+                          <SelectItem value="repeat">Tekrar Gelen Müşteri</SelectItem>
+                          <SelectItem value="recommendation">Tavsiye</SelectItem>
+                          <SelectItem value="social_media">Sosyal Medya</SelectItem>
+                          <SelectItem value="other">Diğer</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
               {/* Ek Katılımcılar */}
               <div className="space-y-2 mt-6">
@@ -947,27 +1691,34 @@ export function TourSalesForm({
 
               <div className="space-y-2">
                 <Label htmlFor="destinationId">Destinasyon</Label>
-                <Select
-                  value={formData.destinationId}
-                  onValueChange={(value) => handleSelectChange("destinationId", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Destinasyon seçin" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {destinations.length > 0 ? (
-                      destinations.map((destination) => (
-                        <SelectItem key={destination.id} value={destination.id}>
-                          {destination.name} ({destination.country})
+                {isLoading ? (
+                  <div className="flex items-center space-x-2 p-2 border rounded-md bg-slate-50">
+                    <div className="animate-spin h-4 w-4 border-2 border-teal-500 rounded-full border-t-transparent"></div>
+                    <span className="text-sm text-muted-foreground">Destinasyonlar yükleniyor...</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.destinationId}
+                    onValueChange={(value) => handleSelectChange("destinationId", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Destinasyon seçin" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {destinations.length > 0 ? (
+                        destinations.map((destination) => (
+                          <SelectItem key={destination.id} value={destination.id}>
+                            {destination.name} ({destination.country})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-destinations">
+                          Destinasyon bulunamadı. Lütfen ayarlardan ekleyin.
                         </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-destinations">
-                        Destinasyon bulunamadı. Lütfen ayarlardan ekleyin.
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1347,27 +2098,34 @@ export function TourSalesForm({
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Aktivite</Label>
-                          <Select
-                            value={activity.activityId || ""}
-                            onValueChange={(value) => updateTourActivity(activity.id, "activityId", value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Aktivite seçin" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {activities && activities.length > 0 ? (
-                                activities.map((act) => (
-                                  <SelectItem key={act.id} value={act.id}>
-                                    {act.name}
+                          {isLoading ? (
+                            <div className="flex items-center space-x-2 p-2 border rounded-md bg-slate-50">
+                              <div className="animate-spin h-4 w-4 border-2 border-teal-500 rounded-full border-t-transparent"></div>
+                              <span className="text-sm text-muted-foreground">Aktiviteler yükleniyor...</span>
+                            </div>
+                          ) : (
+                            <Select
+                              value={activity.activityId || ""}
+                              onValueChange={(value) => updateTourActivity(activity.id, "activityId", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Aktivite seçin" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {activities && activities.length > 0 ? (
+                                  activities.map((act) => (
+                                    <SelectItem key={act.id} value={act.id}>
+                                      {act.name}
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  <SelectItem value="no-activities">
+                                    Aktivite bulunamadı. Lütfen ayarlardan ekleyin.
                                   </SelectItem>
-                                ))
-                              ) : (
-                                <SelectItem value="no-activities">
-                                  Aktivite bulunamadı. Lütfen ayarlardan ekleyin.
-                                </SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
 
                         <div className="space-y-2">
@@ -1415,6 +2173,50 @@ export function TourSalesForm({
                                 ))}
                               </SelectContent>
                             </Select>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="space-y-2">
+                          <Label>Katılımcı Sayısı</Label>
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`all-participants-${activity.id}`}
+                                checked={activity.participantsType === "all"}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    updateTourActivity(activity.id, "participantsType", "all");
+                                    updateTourActivity(activity.id, "participants", Number(formData.numberOfPeople) || 0);
+                                  } else {
+                                    updateTourActivity(activity.id, "participantsType", "custom");
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`all-participants-${activity.id}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              >
+                                Tüm tur katılımcıları ({formData.numberOfPeople} kişi)
+                              </label>
+                            </div>
+                            
+                            {activity.participantsType === "custom" && (
+                              <div className="flex items-center space-x-2 mt-2">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max={formData.numberOfPeople}
+                                  value={activity.participants}
+                                  onChange={(e) => updateTourActivity(activity.id, "participants", Number(e.target.value))}
+                                  placeholder="Katılımcı sayısı"
+                                />
+                                <span className="text-sm text-muted-foreground">
+                                  / {formData.numberOfPeople} kişi
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1582,4 +2384,3 @@ export function TourSalesForm({
     </Card>
   )
 }
-

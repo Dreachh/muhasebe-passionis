@@ -4,14 +4,24 @@ export const exportData = async () => {
     // Tüm verileri topla
     const financialData = localStorage.getItem("financialData")
     const toursData = localStorage.getItem("toursData")
+    const customerData = localStorage.getItem("customerData")
     const companyInfo = localStorage.getItem("companyInfo")
     const preferences = localStorage.getItem("preferences")
+    const destinations = localStorage.getItem("destinations")
+    const activities = localStorage.getItem("activities")
+    const providers = localStorage.getItem("providers")
+    const expenseTypes = localStorage.getItem("expenseTypes")
 
     const exportData = {
       financialData: financialData ? JSON.parse(financialData) : [],
       toursData: toursData ? JSON.parse(toursData) : [],
+      customerData: customerData ? JSON.parse(customerData) : [],
       companyInfo: companyInfo ? JSON.parse(companyInfo) : {},
       preferences: preferences ? JSON.parse(preferences) : {},
+      destinations: destinations ? JSON.parse(destinations) : [],
+      activities: activities ? JSON.parse(activities) : [],
+      providers: providers ? JSON.parse(providers) : [],
+      expenseTypes: expenseTypes ? JSON.parse(expenseTypes) : [],
       exportDate: new Date().toISOString(),
     }
 
@@ -62,6 +72,10 @@ export const importData = async () => {
             // Verileri kaydet
             localStorage.setItem("financialData", JSON.stringify(data.financialData))
             localStorage.setItem("toursData", JSON.stringify(data.toursData))
+            
+            if (data.customerData) {
+              localStorage.setItem("customerData", JSON.stringify(data.customerData))
+            }
 
             if (data.companyInfo) {
               localStorage.setItem("companyInfo", JSON.stringify(data.companyInfo))
@@ -69,6 +83,22 @@ export const importData = async () => {
 
             if (data.preferences) {
               localStorage.setItem("preferences", JSON.stringify(data.preferences))
+            }
+            
+            if (data.destinations) {
+              localStorage.setItem("destinations", JSON.stringify(data.destinations))
+            }
+            
+            if (data.activities) {
+              localStorage.setItem("activities", JSON.stringify(data.activities))
+            }
+            
+            if (data.providers) {
+              localStorage.setItem("providers", JSON.stringify(data.providers))
+            }
+            
+            if (data.expenseTypes) {
+              localStorage.setItem("expenseTypes", JSON.stringify(data.expenseTypes))
             }
 
             resolve(true)

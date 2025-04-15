@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -28,24 +28,45 @@ function generateUUID() {
   })
 }
 
-export function CustomerView({ initialData = null, onCancel, onSave, customersData = [] }) {
-  const [isEditing, setIsEditing] = useState(!!initialData)
+export function CustomerView({ initialData, onCancel, onSave, customersData = [] }) {
+  // State tanımlamaları
+  const [isEditing, setIsEditing] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [customerToDelete, setCustomerToDelete] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [showForm, setShowForm] = useState(!!initialData)
-  const [formData, setFormData] = useState(
-    initialData || {
-      id: generateUUID(),
-      name: "",
-      phone: "",
-      email: "",
-      address: "",
-      idNumber: "",
-      notes: "",
-      createdAt: new Date().toISOString(),
-    },
-  )
+  const [showForm, setShowForm] = useState(false)
+  const [formData, setFormData] = useState({
+    id: generateUUID(),
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    idNumber: "",
+    notes: "",
+    createdAt: new Date().toISOString(),
+  })
+
+  // initialData değiştiğinde çalışacak etki
+  useEffect(() => {
+    if (initialData) {
+      console.log("Düzenleme için veri geldi:", initialData);
+      // Form verilerini düzenlenecek müşteriye göre ayarla
+      setFormData({
+        id: initialData.id || generateUUID(),
+        name: initialData.name || "",
+        phone: initialData.phone || "",
+        email: initialData.email || "",
+        address: initialData.address || "",
+        idNumber: initialData.idNumber || "",
+        notes: initialData.notes || "",
+        createdAt: initialData.createdAt || new Date().toISOString(),
+      })
+      
+      // Düzenleme modunu etkinleştir ve formu göster
+      setIsEditing(true)
+      setShowForm(true)
+    }
+  }, [initialData])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -54,13 +75,15 @@ export function CustomerView({ initialData = null, onCancel, onSave, customersDa
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    
+    // Form verilerini kaydet
     onSave({
       ...formData,
       updatedAt: new Date().toISOString(),
     })
 
+    // Form işleminden sonra durumu sıfırla
     if (!isEditing) {
-      // Form verilerini sıfırla
       setFormData({
         id: generateUUID(),
         name: "",
@@ -71,15 +94,24 @@ export function CustomerView({ initialData = null, onCancel, onSave, customersDa
         notes: "",
         createdAt: new Date().toISOString(),
       })
-      setShowForm(false)
-    } else {
-      setIsEditing(false)
-      setShowForm(false)
     }
+    
+    setIsEditing(false)
+    setShowForm(false)
   }
 
   const handleEdit = (customer) => {
-    setFormData(customer)
+    // Tablodaki düzenle butonuna tıklandığında
+    setFormData({
+      id: customer.id || generateUUID(),
+      name: customer.name || "",
+      phone: customer.phone || "",
+      email: customer.email || "",
+      address: customer.address || "",
+      idNumber: customer.idNumber || "",
+      notes: customer.notes || "",
+      createdAt: customer.createdAt || new Date().toISOString(),
+    })
     setIsEditing(true)
     setShowForm(true)
   }
@@ -90,7 +122,8 @@ export function CustomerView({ initialData = null, onCancel, onSave, customersDa
   }
 
   const confirmDelete = () => {
-    const updatedCustomers = customersData.filter((c) => c.id !== customerToDelete.id)
+    if (!customerToDelete) return
+    
     onSave({
       ...customerToDelete,
       deleted: true,
@@ -100,6 +133,7 @@ export function CustomerView({ initialData = null, onCancel, onSave, customersDa
 
   const toggleForm = () => {
     if (!showForm) {
+      // Yeni müşteri ekle butonuna tıklandığında
       setFormData({
         id: generateUUID(),
         name: "",
@@ -111,16 +145,26 @@ export function CustomerView({ initialData = null, onCancel, onSave, customersDa
         createdAt: new Date().toISOString(),
       })
       setIsEditing(false)
+    } else {
+      // Form kapatılırken düzenleme de iptal edilmeli
+      setIsEditing(false)
     }
     setShowForm(!showForm)
   }
 
+  const openEditForm = (customer) => {
+    handleEdit(customer)
+  }
+
   const filteredCustomers = customersData.filter(
     (customer) =>
+      customer && 
       !customer.deleted &&
-      (customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.phone?.includes(searchTerm) ||
-        customer.email?.toLowerCase().includes(searchTerm.toLowerCase())),
+      (
+        (customer.name && customer.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (customer.phone && customer.phone.includes(searchTerm)) ||
+        (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
   )
 
   return (
@@ -268,7 +312,7 @@ export function CustomerView({ initialData = null, onCancel, onSave, customersDa
                       <TableCell>{customer.idNumber}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end space-x-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)} title="Düzenle">
+                          <Button variant="ghost" size="icon" onClick={() => openEditForm(customer)} title="Düzenle">
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => handleDelete(customer)} title="Sil">
@@ -310,4 +354,3 @@ export function CustomerView({ initialData = null, onCancel, onSave, customersDa
     </div>
   )
 }
-

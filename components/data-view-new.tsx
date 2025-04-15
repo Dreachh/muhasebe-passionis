@@ -7,8 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { DateRange } from "react-day-picker"
-import { DatePickerWithRange } from "@/components/ui/date-range-picker"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +20,6 @@ import {
 import { Search, Edit, Trash2, Eye, Printer } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/data-utils"
 import { deleteData } from "@/lib/db"
-import { PrintButton } from "@/components/ui/print-button"
 
 // Type definitions
 interface TourActivity {
@@ -122,14 +119,6 @@ export function DataView({
   onDataUpdate, 
   onEdit 
 }: DataViewProps) {
-  // Para birimi seçimi için state
-  const [selectedCurrency, setSelectedCurrency] = useState<string>("all");
-  // Diğer özet veriler için state'ler (boş başlatılıyor)
-  const [nationalityData, setNationalityData] = useState<any[]>([]);
-  const [referralSourceData, setReferralSourceData] = useState<any[]>([]);
-  const [toursByDestination, setToursByDestination] = useState<any[]>([]);
-  const [toursByMonth, setToursByMonth] = useState<any[]>([]);
-  const [currencySummaries, setCurrencySummaries] = useState<any>({});
   const [activeTab, setActiveTab] = useState("tours")
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedTour, setSelectedTour] = useState<TourData | null>(null)
@@ -138,7 +127,6 @@ export function DataView({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<DeleteItem>({ type: "", id: "" })
-  const [dateRange, setDateRange] = useState<DateRange | undefined>()
 
   const handleDelete = async () => {
     try {
@@ -195,7 +183,7 @@ export function DataView({
     onEdit(type, item)
   }
 
-  // Function for printing tour details
+  // Function for printing
   const handlePrint = (tour: TourData) => {
     try {
       // Save tour data to localStorage
@@ -214,79 +202,7 @@ export function DataView({
       alert('An error occurred during the print operation. Please try again.');
     }
   }
-  
-  // Function for printing financial records
-  const handlePrintFinancial = () => {
-    try {
-      const companyInfo = JSON.parse(localStorage.getItem('companyInfo') || '{}');
-      return (
-        <PrintButton
-          type="financial"
-          data={filteredFinancialData}
-          companyInfo={companyInfo}
-          dateRange={dateRange}
-        />
-      );
-    } catch (error) {
-      console.error('Error during print operation:', error);
-      toast({
-        title: "Hata",
-        description: "Yazdırma işlemi sırasında bir hata oluştu.",
-        variant: "destructive",
-      });
-      return null;
-    }
-  }
-  
-  // Add PrintButton component for financial data
-  const FinancialPrintButton = () => {
-    const companyInfo = JSON.parse(localStorage.getItem('companyInfo') || '{}');
-    return (
-      <PrintButton
-        type="financial"
-        data={filteredFinancialData}
-        companyInfo={companyInfo}
-        dateRange={dateRange}
-      />
-    );
-  }
-  
-  // Add PrintButton component for customers data
-  const CustomersPrintButton = () => {
-    const companyInfo = JSON.parse(localStorage.getItem('companyInfo') || '{}');
-    return (
-      <PrintButton
-        type="customers"
-        data={filteredCustomersData}
-        companyInfo={companyInfo}
-        dateRange={dateRange}
-      />
-    );
-  }
-  
-  // Add PrintButton component for analytics data
-  const AnalyticsPrintButton = () => {
-    const companyInfo = JSON.parse(localStorage.getItem('companyInfo') || '{}');
-    return (
-      <PrintButton
-        type="analytics"
-        data={{
-          financialData: filteredFinancialData,
-          toursData: filteredToursData,
-          customersData: filteredCustomersData
-        }}
-        companyInfo={companyInfo}
-        dateRange={dateRange}
-        selectedCurrency={selectedCurrency}
-        nationalityData={nationalityData}
-        referralSourceData={referralSourceData}
-        toursByDestination={toursByDestination}
-        toursByMonth={toursByMonth}
-        currencySummaries={currencySummaries}
-      />
-    );
-  }
-  
+
   const filteredToursData = toursData.filter(
     (item: TourData) =>
       (item.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) || '') ||
@@ -608,12 +524,9 @@ export function DataView({
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             Kapat
           </Button>
-          {activeTab === "financial" && <FinancialPrintButton />}
-          {activeTab === "customers" && <CustomersPrintButton />}
-          {activeTab === "tours" && <AnalyticsPrintButton />}
         </div>
       </CardHeader>
       <CardContent>
@@ -691,9 +604,6 @@ export function DataView({
           </TabsContent>
           
           <TabsContent value="financial">
-            <div className="flex justify-end mb-2">
-              <FinancialPrintButton />
-            </div>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
@@ -762,9 +672,6 @@ export function DataView({
           </TabsContent>
           
           <TabsContent value="customers">
-            <div className="flex justify-end mb-2">
-              <CustomersPrintButton />
-            </div>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>

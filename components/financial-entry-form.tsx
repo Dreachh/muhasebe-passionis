@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -29,12 +29,34 @@ export function FinancialEntryForm({ initialData = null, onSave, onCancel }) {
     paymentMethod: initialData?.paymentMethod || "cash",
   })
 
+  const [isEditing, setIsEditing] = useState(false)
+
   const currencies = [
     { value: "TRY", label: "Türk Lirası (₺)" },
     { value: "USD", label: "Amerikan Doları ($)" },
     { value: "EUR", label: "Euro (€)" },
     { value: "GBP", label: "İngiliz Sterlini (£)" },
   ]
+
+  useEffect(() => {
+    if (initialData) {
+      console.log("Financial edit data received:", initialData);
+      // Form verilerini düzenlenecek kaydın değerlerine göre ayarla
+      setFormData({
+        id: initialData.id || generateUUID(),
+        type: initialData.type || "income",
+        category: initialData.category || "",
+        amount: initialData.amount || "",
+        currency: initialData.currency || "TRY",
+        date: initialData.date || new Date().toISOString().split("T")[0],
+        description: initialData.description || "",
+        paymentMethod: initialData.paymentMethod || "cash",
+      });
+      
+      // Düzenleme modunu etkinleştir
+      setIsEditing(true);
+    }
+  }, [initialData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -180,4 +202,3 @@ export function FinancialEntryForm({ initialData = null, onSave, onCancel }) {
     </Card>
   )
 }
-

@@ -1,28 +1,72 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
-import { Download, Upload, Calendar } from "lucide-react"
+import { Download, Upload, Calendar, AlertTriangle } from "lucide-react"
+import { exportData, importData } from "@/lib/export-import"
 
 export function BackupRestoreView({ onClose }) {
   const { toast } = useToast()
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [backupName, setBackupName] = useState(`Yedek_${new Date().toLocaleDateString("tr-TR").replace(/\./g, "-")}`)
+  const [backupOptions, setBackupOptions] = useState({
+    financial: true,
+    tours: true,
+    customers: true,
+    settings: true
+  })
 
-  const handleBackup = () => {
-    toast({
-      title: "Yedekleme başarılı",
-      description: "Verileriniz başarıyla yedeklendi.",
-    })
+  const handleBackup = async () => {
+    try {
+      setIsExporting(true)
+      const success = await exportData()
+      if (success) {
+        toast({
+          title: "Yedekleme başarılı",
+          description: "Verileriniz başarıyla bilgisayarınıza kaydedildi.",
+        })
+      }
+    } catch (error) {
+      console.error("Yedekleme hatası:", error)
+      toast({
+        title: "Yedekleme hatası",
+        description: "Verileriniz yedeklenirken bir hata oluştu.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsExporting(false)
+    }
   }
 
-  const handleRestore = () => {
-    toast({
-      title: "Geri yükleme başarılı",
-      description: "Verileriniz başarıyla geri yüklendi.",
-    })
+  const handleRestore = async () => {
+    try {
+      setIsImporting(true)
+      await importData()
+      toast({
+        title: "Geri yükleme başarılı",
+        description: "Verileriniz başarıyla geri yüklendi. Değişikliklerin görünmesi için sayfa yenilenecek.",
+      })
+      
+      // Sayfayı yenile
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
+    } catch (error) {
+      console.error("Geri yükleme hatası:", error)
+      toast({
+        title: "Geri yükleme hatası",
+        description: error.message || "Verileriniz geri yüklenirken bir hata oluştu.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsImporting(false)
+    }
   }
 
   return (

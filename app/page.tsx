@@ -1,25 +1,24 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { MainDashboard } from "@/components/main-dashboard"
-import { FinancialEntryForm } from "@/components/financial-entry-form"
-import { TourSalesForm } from "@/components/tour-sales-form"
-import { DataView } from "@/components/data-view"
-import { SettingsView } from "@/components/settings-view"
-import { AnalyticsView } from "@/components/analytics-view"
-import { DashboardView } from "@/components/dashboard-view"
-import { CalendarView } from "@/components/calendar-view"
-import { BackupRestoreView } from "@/components/backup-restore"
-import { SplashScreen } from "@/components/splash-screen"
-import { Toaster } from "@/components/ui/toaster"
-import { useToast } from "@/components/ui/use-toast"
-import { CurrencyView } from "@/components/currency-view"
-import { exportData, importData } from "@/lib/export-import"
-import { getAllData, addData, updateData, initializeDB } from "@/lib/db"
-import { AIAssistantView } from "@/components/ai-assistant-view"
-import { CustomerView } from "@/components/customer-view"
-import { MainHeader } from "@/components/main-header"
-import { AIFloatingButton } from "@/components/ai-floating-button"
+import AppLoadSampleData from "./_app-load-sample-data"
+import { MainDashboard } from "../components/main-dashboard"
+import { FinancialEntryForm } from "../components/financial-entry-form"
+import { TourSalesForm } from "../components/tour-sales-form"
+import { DataView } from "../components/data-view"
+import { SettingsView } from "../components/settings-view"
+import { EnhancedAnalyticsView } from "../components/enhanced-analytics-view"
+import { DashboardView } from "../components/dashboard-view"
+import { CalendarView } from "../components/calendar-view"
+import { BackupRestoreView } from "../components/backup-restore"
+import { SplashScreen } from "../components/splash-screen"
+import { Toaster } from "../components/ui/toaster"
+import { useToast } from "../components/ui/use-toast"
+import { CurrencyView } from "../components/currency-view"
+import { exportData, importData } from "../lib/export-import"
+import { getAllData, addData, updateData, initializeDB, clearStore } from "../lib/db"
+import { CustomerView } from "../components/customer-view"
+import { MainHeader } from "../components/main-header"
 import { useRouter } from 'next/navigation'
 
 // Benzersiz ID üretmek için fonksiyon
@@ -32,33 +31,94 @@ function generateUUID() {
 }
 
 // Veri tipleri için arayüzler tanımlayalım
+interface TourActivity {
+  name: string;
+  date?: string | Date;
+  duration?: string;
+  price: number;
+  currency?: string;
+}
+
+interface TourAdditionalCustomer {
+  name?: string;
+  phone?: string;
+  email?: string;
+  idNumber?: string;
+}
+
+interface TourExpense {
+  id?: string;
+  type?: string;
+  name?: string;
+  provider?: string;
+  description?: string;
+  amount?: number;
+  date?: string | Date;
+  category?: string;
+  currency?: string;
+}
+
 interface TourData {
   id: string;
-  [key: string]: any;
+  serialNumber?: string;
+  tourName?: string;
+  tourDate: string | Date;
+  tourEndDate?: string | Date;
+  numberOfPeople?: number;
+  numberOfChildren?: number;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerIdNumber?: string;
+  customerTC?: string;
+  customerPassport?: string;
+  customerDrivingLicense?: string;
+  pricePerPerson?: number;
+  totalPrice?: number;
+  currency?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  partialPaymentAmount?: number;
+  partialPaymentCurrency?: string;
+  notes?: string;
+  activities?: TourActivity[];
+  companyName?: string;
+  additionalCustomers?: TourAdditionalCustomer[];
+  expenses?: TourExpense[];
 }
 
 interface FinancialData {
   id: string;
-  [key: string]: any;
+  date: string | Date;
+  type: string;
+  category?: string;
+  description?: string;
+  amount?: number;
+  currency?: string;
+  paymentMethod?: string;
 }
 
 interface CustomerData {
   id: string;
   name?: string;
   phone?: string;
-  [key: string]: any;
+  email?: string;
+  idNumber?: string;
 }
 
+
 export default function Home() {
-  const [currentView, setCurrentView] = useState<string>("main-dashboard")
+  const [currentView, setCurrentView] = useState<string>("splash")
   const [financialData, setFinancialData] = useState<FinancialData[]>([])
   const [toursData, setToursData] = useState<TourData[]>([])
   const [customersData, setCustomersData] = useState<CustomerData[]>([])
   const [editingRecord, setEditingRecord] = useState<any>(null)
   const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [isAIOpen, setIsAIOpen] = useState<boolean>(false)
+
+  const [splashFinished, setSplashFinished] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
+  const [isAIOpen, setIsAIOpen] = useState(false)
 
   // Add state to store temporary form data
   const [tempTourFormData, setTempTourFormData] = useState<any>(null)
@@ -69,13 +129,108 @@ export default function Home() {
       // Sadece giriş yapılmamışsa admin login'e yönlendir
       const isLoggedIn = localStorage.getItem('adminLoggedIn');
       if (!isLoggedIn) {
+        localStorage.removeItem('financialData');
+        localStorage.removeItem('toursData');
+        localStorage.removeItem('customerData');
         window.location.href = '/admin/login';
       }
       // Eğer giriş yapılmışsa ana sayfada kal
     } catch (err) {
       console.error('Home redirect error:', err);
     }
-  }, [router]);
+  }, []);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        if (typeof window !== 'undefined') {
+          console.log("Veritabanından veriler yükleniyor...");
+          await initializeDB();
+
+          // 1. IndexedDB'den veri yükle
+          const financialDataFromDB = await getAllData("financials") as FinancialData[];
+          const toursDataFromDB = await getAllData("tours") as TourData[];
+          const customersDataFromDB = await getAllData("customers") as CustomerData[];
+
+          let financialLoaded = false;
+          let toursLoaded = false;
+          let customersLoaded = false;
+
+          if (financialDataFromDB && financialDataFromDB.length > 0) {
+            setFinancialData(financialDataFromDB);
+            financialLoaded = true;
+          }
+          if (toursDataFromDB && toursDataFromDB.length > 0) {
+            setToursData(toursDataFromDB);
+            toursLoaded = true;
+          }
+          if (customersDataFromDB && customersDataFromDB.length > 0) {
+            setCustomersData(customersDataFromDB);
+            customersLoaded = true;
+          }
+
+          // 2. Eğer hiç veri yoksa örnek dosyadan yükle (örnekler sadece ilk açılışta)
+          if (!financialLoaded || !toursLoaded || !customersLoaded) {
+            const loadSample = async (file: string): Promise<any | null> => {
+              // public/data/ dizininde olmalı
+              try {
+                const res = await fetch(`/data/${file}`);
+                if (!res.ok) return null;
+                return await res.json();
+              } catch (err) { return null; }
+            };
+            if (!financialLoaded) {
+              const financeSample = await loadSample('sample-finance.json');
+              if (financeSample && financeSample.expenses && financeSample.incomes) {
+                const allFinancials = [
+                  ...financeSample.expenses.map((e: any) => ({ ...e, type: 'expense' })),
+                  ...financeSample.incomes.map((e: any) => ({ ...e, type: 'income' }))
+                ];
+                setFinancialData(allFinancials);
+                await clearStore("financials");
+                for (const item of allFinancials) {
+                  await addData("financials", item);
+                }
+              }
+            }
+            if (!toursLoaded) {
+              const toursSample = await loadSample('sample-tours.json');
+              if (toursSample && Array.isArray(toursSample)) {
+                setToursData(toursSample);
+                await clearStore("tours");
+                for (const item of toursSample) {
+                  await addData("tours", item);
+                }
+              }
+            }
+            if (!customersLoaded) {
+              // Eğer müşteri dosyan yoksa, turlardan müşteri üret
+              const toursSample = await loadSample('sample-tours.json');
+              if (toursSample && Array.isArray(toursSample)) {
+                const customers = toursSample.map((t: any) => ({
+                  id: t.customerPhone || t.customerEmail || generateUUID(),
+                  name: t.customerName,
+                  phone: t.customerPhone,
+                  email: t.customerEmail
+                }));
+                setCustomersData(customers);
+                await clearStore("customers");
+                for (const item of customers) {
+                  await addData("customers", item);
+                }
+              }
+            }
+          }
+          setSplashFinished(true);
+        }
+      } catch (error) {
+        console.error("Veriler yüklenirken hata oluştu:", error);
+        setSplashFinished(true);
+      }
+    }
+
+    fetchData();
+  }, []);
 
   useEffect(() => {
     // Veritabanını başlat
@@ -88,33 +243,7 @@ export default function Home() {
     }
 
     setupDB()
-
-    // Uygulama başlangıcında verileri yükle
-    const loadData = async () => {
-      setIsLoading(true)
-      try {
-        // IndexedDB'den verileri yükle
-        const tours = await getAllData("tours")
-        const financials = await getAllData("financials")
-        const customers = await getAllData("customers")
-
-        setToursData(tours)
-        setFinancialData(financials)
-        setCustomersData(customers)
-      } catch (error) {
-        console.error("Veri yükleme hatası:", error)
-        toast({
-          title: "Hata",
-          description: "Veriler yüklenirken bir hata oluştu.",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadData()
-  }, [toast])
+  }, [])
 
   const handleSplashFinish = () => {
     setCurrentView("main-dashboard")
@@ -134,8 +263,9 @@ export default function Home() {
 
     setCurrentView(view)
 
-    // Only reset editing record if not temporarily navigating to settings
-    if (!(currentView === "tour-sales" && view === "settings")) {
+    // Düzenleme kaydı varsa ve ilgili düzenleme formlarına geçmiyorsak sıfırla
+    const editForms = ["tour-sales", "financial-entry", "customers"];
+    if (editingRecord && !editForms.includes(view)) {
       setEditingRecord(null)
     }
   }
@@ -145,27 +275,45 @@ export default function Home() {
       if (type === "financial") {
         // Finansal verileri güncelle
         setFinancialData(newData as FinancialData[])
-
-        // Veritabanını temizle ve yeni verileri ekle
+        
+        // IndexedDB'yi güncelle
+        await clearStore("financials");
         for (const item of newData) {
-          await updateData("financials", item)
+          await addData("financials", item);
         }
+        
+        // Ayrıca localStorage'a da kaydet (yedek olarak)
+        localStorage.setItem("financialData", JSON.stringify(newData));
+        
+        console.log("Finansal veriler güncellendi:", newData);
       } else if (type === "tours") {
         // Tur verilerini güncelle
         setToursData(newData as TourData[])
-
-        // Veritabanını temizle ve yeni verileri ekle
+        
+        // IndexedDB'yi güncelle
+        await clearStore("tours");
         for (const item of newData) {
-          await updateData("tours", item)
+          await addData("tours", item);
         }
+        
+        // Ayrıca localStorage'a da kaydet (yedek olarak)
+        localStorage.setItem("toursData", JSON.stringify(newData));
+        
+        console.log("Tur verileri güncellendi:", newData);
       } else if (type === "customers") {
         // Müşteri verilerini güncelle
         setCustomersData(newData as CustomerData[])
-
-        // Veritabanını güncelle
+        
+        // IndexedDB'yi güncelle
+        await clearStore("customers");
         for (const item of newData) {
-          await updateData("customers", item)
+          await addData("customers", item);
         }
+        
+        // Ayrıca localStorage'a da kaydet (yedek olarak)
+        localStorage.setItem("customerData", JSON.stringify(newData));
+        
+        console.log("Müşteri verileri güncellendi:", newData);
       }
 
       toast({
@@ -181,6 +329,50 @@ export default function Home() {
       })
     }
   }
+
+  // Tur giderlerini finansal kayıtlara ekleyen yardımcı fonksiyon
+  const addTourExpensesToFinancials = async (tourData: any) => {
+    try {
+      // Tur giderlerini finansal kayıtlara ekle
+      if (tourData.expenses && tourData.expenses.length > 0) {
+        for (const expense of tourData.expenses) {
+          if (!expense.amount || expense.amount <= 0) continue;
+          
+          const financialRecord: FinancialData = {
+            id: generateUUID(),
+            date: new Date().toISOString(),
+            type: "expense",
+            category: expense.category || "Tur Gideri",
+            description: `${tourData.tourName || 'İsimsiz Tur'} - ${expense.name || 'Gider'} (${tourData.serialNumber || 'No'})`,
+            amount: expense.amount,
+            currency: expense.currency || "TRY",
+            paymentMethod: "cash",
+            relatedTourId: tourData.id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          // Finansal kaydı ekle
+          await addData("financials", financialRecord);
+          setFinancialData([...financialData, financialRecord]);
+          
+          console.log("Tur gideri finansal kayıtlara eklendi:", financialRecord);
+        }
+        
+        toast({
+          title: "Bilgi",
+          description: "Tur giderleri finansal kayıtlara aktarıldı.",
+        });
+      }
+    } catch (error) {
+      console.error("Tur giderleri finansal kayıtlara eklenirken hata:", error);
+      toast({
+        title: "Uyarı",
+        description: "Tur giderleri finansal kayıtlara eklenirken bir hata oluştu.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSaveTour = async (tourData: any) => {
     try {
@@ -214,43 +406,29 @@ export default function Home() {
         });
       }
 
-      // Ek katılımcıları da kaydet
-      if (tourData.additionalCustomers && tourData.additionalCustomers.length > 0) {
-        for (const additionalCustomer of tourData.additionalCustomers) {
-          if (!additionalCustomer.name) continue; // Adı boş olanları atla
-          
-          const additionalCustomerExists = customersData.some(
-            (customer) => 
-              customer.name === additionalCustomer.name && 
-              customer.phone === additionalCustomer.phone
-          );
-          
-          if (!additionalCustomerExists) {
-            const newAdditionalCustomer: CustomerData = {
-              id: generateUUID(),
-              name: additionalCustomer.name,
-              phone: additionalCustomer.phone,
-              idNumber: additionalCustomer.idNumber,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-            
-            // Ek katılımcıyı veritabanına ekle
-            await addData("customers", newAdditionalCustomer);
-            setCustomersData([...customersData, newAdditionalCustomer]);
-          }
-        }
-      }
+      // Ek katılımcıları kaydetme işlemi kaldırıldı
+      // Kullanıcı isteğine göre sadece ana müşteri kaydedilecek, ek katılımcılar müşteriler kısmına kaydedilmeyecek
+      // Ek katılımcılar sadece tur kaydında tutulacak ve tur ön izlemesinde görüntülenecek
 
       // Sonra tur kaydını kaydet
       if (tourData.id && toursData.some((tour) => tour.id === tourData.id)) {
         // Mevcut turu güncelle
         await updateData("tours", tourData)
         setToursData(toursData.map((tour) => (tour.id === tourData.id ? tourData : tour)))
+        
+        // Tur tamamlandıysa giderleri finansal kayıtlara ekle
+        if (tourData.paymentStatus === "completed" && tourData.expenses && tourData.expenses.length > 0) {
+          await addTourExpensesToFinancials(tourData);
+        }
       } else {
         // Yeni tur ekle
         await addData("tours", tourData)
         setToursData([...toursData, tourData])
+        
+        // Tur tamamlandıysa giderleri finansal kayıtlara ekle
+        if (tourData.paymentStatus === "completed" && tourData.expenses && tourData.expenses.length > 0) {
+          await addTourExpensesToFinancials(tourData);
+        }
       }
 
       toast({
@@ -331,13 +509,25 @@ export default function Home() {
   }
 
   const handleEditRecord = (type: string, record: any) => {
-    setEditingRecord(record)
+    console.log("Düzenleme kaydı:", type, record);
+    
+    // Derin kopya oluştur (JSON parse/stringify kullanarak)
+    const recordCopy = JSON.parse(JSON.stringify(record));
+    
+    // Doğrudan düzenlenecek kaydı ayarla
+    setEditingRecord(recordCopy);
+    
+    // İlgili görünüme yönlendir
     if (type === "tours") {
-      navigateTo("tour-sales")
+      // Navigasyon öncesi düzenleme kaydını konsola yazdır
+      console.log("Tur düzenleme verileri:", recordCopy);
+      navigateTo("tour-sales");
     } else if (type === "financial") {
-      navigateTo("financial-entry")
+      console.log("Finansal düzenleme verileri:", recordCopy);
+      navigateTo("financial-entry");
     } else if (type === "customers") {
-      navigateTo("customers")
+      console.log("Müşteri düzenleme verileri:", recordCopy);
+      navigateTo("customers");
     }
   }
 
@@ -399,7 +589,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
+      <AppLoadSampleData />
       <MainHeader currentView={currentView} onNavigate={navigateTo} />
 
       {/* Ana İçerik */}
@@ -477,9 +667,10 @@ export default function Home() {
         {currentView === "settings" && <SettingsView onClose={handleReturnFromSettings} />}
 
         {currentView === "analytics" && (
-          <AnalyticsView
+          <EnhancedAnalyticsView
             financialData={financialData}
             toursData={toursData}
+            customersData={customersData}
             onClose={() => navigateTo("main-dashboard")}
           />
         )}
@@ -488,26 +679,11 @@ export default function Home() {
 
         {currentView === "currency" && <CurrencyView onClose={() => navigateTo("main-dashboard")} />}
 
-        {currentView === "ai-assistant" && (
-          <AIAssistantView
-            onNavigate={navigateTo}
-            onClose={() => navigateTo("main-dashboard")}
-            financialData={financialData}
-            toursData={toursData}
-            customersData={customersData}
-          />
-        )}
+
       </main>
 
       {/* AI Floating Button */}
-      <AIFloatingButton
-        isOpen={isAIOpen}
-        onToggle={() => setIsAIOpen(!isAIOpen)}
-        onNavigate={navigateTo}
-        financialData={financialData}
-        toursData={toursData}
-        customersData={customersData}
-      />
+      {/* AIFloatingButton bileşeni kaldırıldı */}
 
       <footer className="py-4 px-6 text-center text-muted-foreground border-t bg-white">
         <p>&copy; {new Date().getFullYear()} PassionisTravel Yönetim Sistemi. Tüm hakları saklıdır.</p>
@@ -517,4 +693,3 @@ export default function Home() {
     </div>
   )
 }
-

@@ -29,6 +29,78 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
   const [selectedCurrency, setSelectedCurrency] = useState("all")
 
   // Tarih aralığına göre verileri filtrele
+  // LocalStorage'dan analiz verilerini yükle
+  useEffect(() => {
+    try {
+      // Analiz verilerini localStorage'dan yükle
+      const savedAnalysisData = localStorage.getItem('analysisData');
+      if (savedAnalysisData) {
+        let analysisData;
+        try {
+          analysisData = JSON.parse(savedAnalysisData);
+          console.log('Analiz verileri yüklendi:', analysisData);
+        } catch (parseError) {
+          console.error('JSON ayrıştırma hatası:', parseError);
+          return;
+        }
+        
+        // Tur analizi verilerini toursData'ya ekle
+        if (analysisData && analysisData.tours && Array.isArray(analysisData.tours) && analysisData.tours.length > 0) {
+          // Mevcut tur verilerine analiz verilerini ekle
+          const updatedToursData = [...(toursData || [])];
+          
+          // Her analiz verisi için kontrol et
+          analysisData.tours.forEach(tourAnalysis => {
+            if (!tourAnalysis || !tourAnalysis.tourId) return;
+            
+            // Aynı ID'ye sahip tur var mı kontrol et
+            const existingIndex = updatedToursData.findIndex(tour => tour && tour.id === tourAnalysis.tourId);
+            
+            // Tur verisi yoksa ekle
+            if (existingIndex === -1) {
+              updatedToursData.push({
+                id: tourAnalysis.tourId,
+                tourName: tourAnalysis.tourName || 'İsimsiz Tur',
+                destinationId: tourAnalysis.destinationId,
+                destinationName: tourAnalysis.destinationName,
+                tourDate: tourAnalysis.tourDate || new Date().toISOString(),
+                tourEndDate: tourAnalysis.tourEndDate,
+                numberOfPeople: parseInt(tourAnalysis.totalParticipants) || 0,
+                totalPrice: parseFloat(tourAnalysis.totalPrice) || 0,
+                currency: tourAnalysis.currency || 'TRY',
+                paymentStatus: tourAnalysis.paymentStatus || 'pending',
+                customerName: tourAnalysis.mainCustomer?.name || 'Bilinmeyen Müşteri',
+                createdAt: tourAnalysis.analysisDate || new Date().toISOString(),
+                // Tur analizi verisini de ekle
+                analysis: tourAnalysis
+              });
+            }
+          });
+          
+          // Güncellenmiş tur verilerini ayarla
+          if (updatedToursData.length > (toursData?.length || 0)) {
+            console.log('Tur verileri güncellendi:', updatedToursData.length - (toursData?.length || 0), 'yeni tur eklendi');
+            // toursData prop olduğu için doğrudan değiştiremiyoruz, bu yüzden filteredToursData'yı güncelliyoruz
+            setFilteredToursData(updatedToursData);
+          } else {
+            // Başlangıçta filteredToursData'yı toursData ile eşleştir
+            setFilteredToursData(toursData || []);
+          }
+        } else {
+          // Analiz verisi yoksa, toursData'yı kullan
+          setFilteredToursData(toursData || []);
+        }
+      } else {
+        // localStorage'da veri yoksa, toursData'yı kullan
+        setFilteredToursData(toursData || []);
+      }
+    } catch (error) {
+      console.error('Analiz verileri yüklenirken hata:', error);
+      // Hata durumunda, toursData'yı kullan
+      setFilteredToursData(toursData || []);
+    }
+  }, [toursData]);
+  
   useEffect(() => {
     const now = new Date()
     let startDate = new Date()
@@ -56,15 +128,28 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
     }
 
     // Finansal verileri filtrele
-    const filteredFinancial = financialData.filter((item) => {
-      const itemDate = new Date(item.date)
-      return itemDate >= startDate && itemDate <= now
+    const filteredFinancial = (financialData || []).filter((item) => {
+      if (!item || !item.date) return false;
+      try {
+        const itemDate = new Date(item.date)
+        return itemDate >= startDate && itemDate <= now
+      } catch (e) {
+        console.error('Tarih dönüştürme hatası:', e);
+        return false;
+      }
     })
 
     // Tur verilerini filtrele
-    const filteredTours = toursData.filter((item) => {
-      const itemDate = new Date(item.tourDate)
-      return itemDate >= startDate && itemDate <= now
+    const currentToursData = toursData || []; // Orijinal tur verilerini kullan
+    const filteredTours = currentToursData.filter((item) => {
+      if (!item || !item.tourDate) return false;
+      try {
+        const itemDate = new Date(item.tourDate)
+        return itemDate >= startDate && itemDate <= now
+      } catch (e) {
+        console.error('Tarih dönüştürme hatası:', e);
+        return false;
+      }
     })
 
     setFilteredFinancialData(filteredFinancial)
@@ -73,34 +158,38 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
 
   // Para birimine göre filtreleme
   const getFilteredToursByCurrency = () => {
+    if (!filteredToursData || !Array.isArray(filteredToursData)) {
+      return [];
+    }
+    
     if (selectedCurrency === "all") {
       return filteredToursData
     }
-    return filteredToursData.filter((tour) => tour.currency === selectedCurrency)
+    return filteredToursData.filter((tour) => tour && tour.currency === selectedCurrency)
   }
 
   // Analitik hesaplamaları
-  const totalIncome = filteredFinancialData
-    .filter((item) => item.type === "income")
-    .reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+  const totalIncome = (filteredFinancialData || [])
+    .filter((item) => item && item.type === "income")
+    .reduce((sum, item) => sum + (Number.parseFloat(item?.amount?.toString() || '0') || 0), 0)
 
-  const totalExpense = filteredFinancialData
-    .filter((item) => item.type === "expense")
-    .reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+  const totalExpense = (filteredFinancialData || [])
+    .filter((item) => item && item.type === "expense")
+    .reduce((sum, item) => sum + (Number.parseFloat(item?.amount?.toString() || '0') || 0), 0)
 
   const totalProfit = totalIncome - totalExpense
 
-  const filteredToursByCurrency = getFilteredToursByCurrency()
+  const filteredToursByCurrency = getFilteredToursByCurrency() || []
   const totalTours = filteredToursByCurrency.length
 
   const totalCustomers = filteredToursByCurrency.reduce(
-    (sum, item) => sum + (Number.parseInt(item.numberOfPeople) || 0),
+    (sum, item) => sum + (Number.parseInt(item?.numberOfPeople?.toString() || '0') || 0),
     0,
   )
 
   const averageTourPrice =
     totalTours > 0
-      ? filteredToursByCurrency.reduce((sum, item) => sum + (Number.parseFloat(item.totalPrice) || 0), 0) / totalTours
+      ? filteredToursByCurrency.reduce((sum, item) => sum + (Number.parseFloat(item?.totalPrice?.toString() || '0') || 0), 0) / totalTours
       : 0
 
   // Para birimine göre toplam gelir
@@ -108,9 +197,20 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
     const revenues = {}
 
     // Her para birimi için toplam geliri hesapla
-    filteredToursData.forEach((tour) => {
+    if (!filteredToursData || !Array.isArray(filteredToursData)) {
+      console.error('filteredToursData geçerli bir dizi değil:', filteredToursData);
+      return [];
+    }
+
+    // Para birimine göre filtrelenmiş tur verilerini kullan
+    const toursToProcess = selectedCurrency === "all" 
+      ? filteredToursData 
+      : filteredToursData.filter(tour => tour && tour.currency === selectedCurrency);
+
+    toursToProcess.forEach((tour) => {
+      if (!tour) return;
       const currency = tour.currency || "TRY"
-      const amount = Number.parseFloat(tour.totalPrice) || 0
+      const amount = Number.parseFloat(tour.totalPrice?.toString() || '0') || 0
 
       if (!revenues[currency]) {
         revenues[currency] = 0
@@ -123,6 +223,15 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
     return Object.entries(revenues).map(([currency, amount]) => ({
       name: currency,
       value: amount,
+      // Para birimi sembolü ve etiketini ekle
+      symbol: currency === "TRY" ? "₺" : 
+              currency === "USD" ? "$" : 
+              currency === "EUR" ? "€" : 
+              currency === "GBP" ? "£" : currency,
+      label: currency === "TRY" ? "Türk Lirası" : 
+             currency === "USD" ? "Amerikan Doları" : 
+             currency === "EUR" ? "Euro" : 
+             currency === "GBP" ? "İngiliz Sterlini" : currency
     }))
   }
 
@@ -146,6 +255,15 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
     return Object.entries(incomeData).map(([currency, amount]) => ({
       name: currency,
       value: amount,
+      // Para birimi sembolü ve etiketini ekle
+      symbol: currency === "TRY" ? "₺" : 
+              currency === "USD" ? "$" : 
+              currency === "EUR" ? "€" : 
+              currency === "GBP" ? "£" : currency,
+      label: currency === "TRY" ? "Türk Lirası" : 
+             currency === "USD" ? "Amerikan Doları" : 
+             currency === "EUR" ? "Euro" : 
+             currency === "GBP" ? "İngiliz Sterlini" : currency
     }))
   }
 
@@ -333,7 +451,7 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
                   <CardTitle className="text-sm font-medium">Toplam Gelir</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</div>
+                  <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome, selectedCurrency === "all" ? "TRY" : selectedCurrency)}</div>
                 </CardContent>
               </Card>
 
@@ -342,7 +460,7 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
                   <CardTitle className="text-sm font-medium">Toplam Gider</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpense)}</div>
+                  <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpense, selectedCurrency === "all" ? "TRY" : selectedCurrency)}</div>
                 </CardContent>
               </Card>
 
@@ -352,7 +470,7 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
                 </CardHeader>
                 <CardContent>
                   <div className={`text-2xl font-bold ${totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {formatCurrency(totalProfit)}
+                    {formatCurrency(totalProfit, selectedCurrency === "all" ? "TRY" : selectedCurrency)}
                   </div>
                 </CardContent>
               </Card>
@@ -367,7 +485,12 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Tooltip formatter={(value, name, props) => {
+                        if (name === "income") return `Gelir: ${value.toLocaleString("tr-TR")} ${selectedCurrency !== "all" ? selectedCurrency : "TRY"}`;
+                        if (name === "expense") return `Gider: ${value.toLocaleString("tr-TR")} ${selectedCurrency !== "all" ? selectedCurrency : "TRY"}`;
+                        if (name === "profit") return `Kar: ${value.toLocaleString("tr-TR")} ${selectedCurrency !== "all" ? selectedCurrency : "TRY"}`;
+                        return `${value.toLocaleString("tr-TR")} ${selectedCurrency !== "all" ? selectedCurrency : "TRY"}`;
+                      }} />
                       <Legend />
                       <Line type="monotone" dataKey="income" name="Gelir" stroke="#4ade80" strokeWidth={2} />
                       <Line type="monotone" dataKey="expense" name="Gider" stroke="#f87171" strokeWidth={2} />
@@ -398,7 +521,10 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => formatCurrency(value)} />
+                          <Tooltip formatter={(value, name, props) => {
+                          const currency = props?.payload?.symbol || "TRY";
+                          return `${value.toLocaleString("tr-TR")} ${currency}`;
+                        }} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
@@ -430,7 +556,10 @@ export function AnalyticsView({ financialData = [], toursData = [], onClose }) {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => formatCurrency(value)} />
+                          <Tooltip formatter={(value, name, props) => {
+                          const currency = props?.payload?.symbol || "TRY";
+                          return `${value.toLocaleString("tr-TR")} ${currency}`;
+                        }} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
