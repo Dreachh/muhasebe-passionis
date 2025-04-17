@@ -55,6 +55,17 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
   // Toplam müşteri sayısı
   const totalCustomers = customersData.length
 
+  // Tur Geliri: Turlarda alınan toplam ücret
+  const totalTourIncome = toursData.reduce((sum, tour) => sum + (Number.parseFloat(tour.totalPrice?.toString() || "0") || 0), 0)
+
+  // Tur Gideri: Turlardaki giderlerin toplamı
+  const totalTourExpense = toursData.reduce((sum, tour) => {
+    if (Array.isArray(tour.expenses)) {
+      return sum + tour.expenses.reduce((eSum, expense) => eSum + (Number.parseFloat(expense.amount?.toString() || "0") || 0), 0)
+    }
+    return sum
+  }, 0)
+
   // Yaklaşan turlar (bugünden sonraki 30 gün)
   const today = new Date()
   const next30Days = new Date()
@@ -128,14 +139,14 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
   return (
     <div className="space-y-6">
       {/* İstatistik Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        {/* Finansal Gelir */}
         <Card className="border-l-4 border-l-green-500">
           <CardContent className="p-6">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Gelir (Son 30 gün)</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">Finansal Gelir (Son 30 gün)</h3>
                 <div>
-                  {/* Para birimlerine göre ayrı ayrı göster */}
                   {Object.entries(incomeByCurrency).map(([currency, amount]) => (
                     <p key={currency} className="text-xl font-bold text-green-600">
                       {formatCurrency(amount, currency)}
@@ -149,14 +160,13 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
             </div>
           </CardContent>
         </Card>
-
+        {/* Finansal Gider */}
         <Card className="border-l-4 border-l-red-500">
           <CardContent className="p-6">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Gider (Son 30 gün)</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">Finansal Gider (Son 30 gün)</h3>
                 <div>
-                  {/* Para birimlerine göre ayrı ayrı göster */}
                   {Object.entries(expenseByCurrency).map(([currency, amount]) => (
                     <p key={currency} className="text-xl font-bold text-red-600">
                       {formatCurrency(amount, currency)}
@@ -170,7 +180,35 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
             </div>
           </CardContent>
         </Card>
-
+        {/* Tur Geliri */}
+        <Card className="border-l-4 border-l-indigo-500">
+          <CardContent className="p-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Tur Geliri (Toplam)</h3>
+                <p className="text-2xl font-bold text-indigo-600">{formatCurrency(totalTourIncome, "TRY")}</p>
+              </div>
+              <div className="bg-indigo-100 p-3 rounded-full">
+                <Globe className="h-6 w-6 text-indigo-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Tur Gideri */}
+        <Card className="border-l-4 border-l-fuchsia-500">
+          <CardContent className="p-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Tur Gideri (Toplam)</h3>
+                <p className="text-2xl font-bold text-fuchsia-600">{formatCurrency(totalTourExpense, "TRY")}</p>
+              </div>
+              <div className="bg-fuchsia-100 p-3 rounded-full">
+                <BarChart2 className="h-6 w-6 text-fuchsia-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Toplam Müşteri */}
         <Card className="border-l-4 border-l-blue-500">
           <CardContent className="p-6">
             <div className="flex justify-between items-center">
@@ -184,7 +222,7 @@ export function MainDashboard({ onNavigate, financialData = [], toursData = [], 
             </div>
           </CardContent>
         </Card>
-
+        {/* Yaklaşan Turlar */}
         <Card className="border-l-4 border-l-amber-500">
           <CardContent className="p-6">
             <div className="flex justify-between items-center">
